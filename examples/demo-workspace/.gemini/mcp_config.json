@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "gemini-api-docs": {
+      "url": "https://docs.example.invalid/mcp/sse",
+      "type": "sse"
+    },
+    "persistent-memory": {
+      "command": "python",
+      "args": ["-m", "persistent_memory_mcp"],
+      "env": {
+        "MEMORY_DB_PATH": "${HOME}/.skilldeck/memory.sqlite"
+      }
+    }
+  }
+}

@@ -1,0 +1,66 @@
+{
+  "id": "edge-release-pipeline",
+  "name": "Edge Feature Release Pipeline",
+  "description": "End-to-end full-stack release workflow: audit PostgreSQL RLS migrations, verify UI accessibility, deploy Cloudflare Worker, and open a GitHub PR.",
+  "nodes": [
+    {
+      "id": "n-trigger",
+      "type": "trigger",
+      "label": "Release Request",
+      "description": "Triggered when preparing a production feature release touching schema, UI, and edge API.",
+      "position": { "x": 40, "y": 140 }
+    },
+    {
+      "id": "n-db",
+      "type": "skill",
+      "label": "postgres-schema-guardian",
+      "description": "Validate SQL migrations and Row-Level Security policies.",
+      "position": { "x": 300, "y": 40 }
+    },
+    {
+      "id": "n-ui",
+      "type": "skill",
+      "label": "react-ui-accessibility",
+      "description": "Audit dark mode, semantic landmarks, and keyboard navigation.",
+      "position": { "x": 300, "y": 240 }
+    },
+    {
+      "id": "n-gate",
+      "type": "gate",
+      "label": "Pre-Deploy Verification Gate",
+      "description": "Require passing SQL checks and zero P0 accessibility regressions.",
+      "position": { "x": 600, "y": 140 }
+    },
+    {
+      "id": "n-cf",
+      "type": "skill",
+      "label": "cloudflare-workers-deploy",
+      "description": "Dry-run and publish Cloudflare Worker bindings.",
+      "position": { "x": 880, "y": 60 }
+    },
+    {
+      "id": "n-gh",
+      "type": "mcp",
+      "label": "github",
+      "description": "Create release summary PR and attach verification report.",
+      "position": { "x": 880, "y": 230 }
+    },
+    {
+      "id": "n-out",
+      "type": "output",
+      "label": "Signed Release Summary",
+      "description": "Emit final deployment digest with rollback ID.",
+      "position": { "x": 1160, "y": 140 }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "n-trigger", "target": "n-db" },
+    { "id": "e2", "source": "n-trigger", "target": "n-ui" },
+    { "id": "e3", "source": "n-db", "target": "n-gate" },
+    { "id": "e4", "source": "n-ui", "target": "n-gate" },
+    { "id": "e5", "source": "n-gate", "target": "n-cf" },
+    { "id": "e6", "source": "n-gate", "target": "n-gh" },
+    { "id": "e7", "source": "n-cf", "target": "n-out" },
+    { "id": "e8", "source": "n-gh", "target": "n-out" }
+  ]
+}

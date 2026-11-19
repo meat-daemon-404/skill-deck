@@ -1,0 +1,11 @@
+---
+description: Enforce strict TypeScript conventions, explicit return types on public exports, and zero implicit any across monorepo packages. Use when editing .ts or .tsx files.
+globs: "**/*.ts,**/*.tsx"
+alwaysApply: false
+---
+
+# TypeScript Strict Style
+
+- Never silence compiler errors with `@ts-ignore` or bare `as any`.
+- Prefer discriminated unions over optional boolean flag combinations.
+- Keep public package APIs typed and documented in `src/types.ts`.

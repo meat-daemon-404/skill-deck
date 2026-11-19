@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github@latest"],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    "postgres-analytics": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-postgres@0.6.2", "postgresql://readonly:demoPass99@localhost:5432/appdb"],
+      "env": {
+        "OPENAI_API_KEY": "sk-demo-9876543210abcdefghijklmnop"
+      }
+    },
+    "legacy-vector-sync": {
+      "command": "nonexistent-mcp-bin",
+      "args": ["--mode", "stdio"],
+      "disabled": false
+    }
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@skilldeck/core",
+  "version": "0.1.0",
+  "description": "Core analysis engine for SkillDeck: Agent Skills (SKILL.md) parser, MCP auditor, token budget estimator, bilingual trigger conflict radar, prompt router, and cross-platform exporter.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "yaml": "^2.7.0"
+  }
+}

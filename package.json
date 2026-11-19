@@ -1,0 +1,28 @@
+{
+  "name": "skill-deck-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "SkillDeck — Local-first Control Tower for AI Agent Skills (SKILL.md), MCP Servers, Context Budgets, Trigger Routing & Visual Workflows",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@10.0.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "pnpm --filter @skilldeck/core build && pnpm --filter @skilldeck/server build && pnpm --filter @skilldeck/cli build && pnpm --filter @skilldeck/web build",
+    "dev": "pnpm --filter @skilldeck/core build && pnpm --parallel --filter @skilldeck/server --filter @skilldeck/web dev",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "cli": "pnpm --filter @skilldeck/cli exec tsx src/cli.ts",
+    "demo": "pnpm build && node packages/cli/dist/cli.js serve --demo",
+    "clean": "pnpm -r clean"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}
