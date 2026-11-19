@@ -37,6 +37,7 @@ export function SkillsView({
   const [searchText, setSearchText] = useState('');
   const [platformFilter, setPlatformFilter] = useState<'all' | AgentPlatform>('all');
   const [sortBy, setSortBy] = useState<'startup' | 'body' | 'name'>('startup');
+  const [showAllRows, setShowAllRows] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
 
   useEffect(() => {
@@ -203,7 +204,7 @@ export function SkillsView({
                   </td>
                 </tr>
               ) : (
-                filtered.map((skill) => {
+                (showAllRows ? filtered : filtered.slice(0, 100)).map((skill) => {
                   const counts = issueCountBySkill.get(skill.id);
                   const imm = immuneMap.get(skill.id);
                   const hasErrors = (counts?.errors ?? 0) > 0;
@@ -281,6 +282,14 @@ export function SkillsView({
             </tbody>
           </table>
         </div>
+
+        {filtered.length > 100 && !showAllRows && (
+          <div className="row-wrap" style={{ justifyContent: 'center' }}>
+            <button type="button" className="btn btn-sm" onClick={() => setShowAllRows(true)}>
+              {t(`展开全部 ${filtered.length} 个技能（当前显示前 100 个）`, `Show all ${filtered.length} skills (showing first 100)`)}
+            </button>
+          </div>
+        )}
       </article>
 
       {/* Native <dialog> Inspector with light-dismiss closedby="any" */}

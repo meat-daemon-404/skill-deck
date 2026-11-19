@@ -69,6 +69,7 @@ export function App() {
   const { lang, toggleLang, t } = useI18n();
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [mode, setMode] = useState<WorkspaceMode>('demo');
+  const [modeInitialized, setModeInitialized] = useState(false);
   const [customPath, setCustomPath] = useState('');
   const [includeBuiltin, setIncludeBuiltin] = useState(false);
 
@@ -162,8 +163,28 @@ export function App() {
   }, [mode, customPath, includeBuiltin]);
 
   useEffect(() => {
+    let active = true;
+    fetch('/api/health')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { defaultMode?: string } | null) => {
+        if (!active) return;
+        if (data?.defaultMode === 'local' || data?.defaultMode === 'demo') {
+          setMode(data.defaultMode);
+        }
+        setModeInitialized(true);
+      })
+      .catch(() => {
+        if (active) setModeInitialized(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!modeInitialized) return;
     void loadReport();
-  }, [loadReport]);
+  }, [loadReport, modeInitialized]);
 
   function openSkillFromAnywhere(skill: SkillRecord) {
     setInspectedSkill(skill);

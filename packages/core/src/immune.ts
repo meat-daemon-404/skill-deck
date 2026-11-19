@@ -24,6 +24,32 @@ interface BuiltinImmuneRule {
   recommendation: string;
 }
 
+const TRUSTED_INSTALLER_DOMAINS_RE =
+  /https:\/\/(?:dl\.google\.com|raw\.githubusercontent\.com\/(?:google-gemini|astral-sh|nvm-sh|ohmyzsh)|astral\.sh|unity\.com|bun\.sh|sh\.rustup\.rs|get\.pnpm\.io|get\.docker\.com|brew\.sh)\b/i;
+
+const TEXT_SCRIPT_EXTS = new Set([
+  '.sh',
+  '.bash',
+  '.zsh',
+  '.ps1',
+  '.bat',
+  '.cmd',
+  '.py',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.ts',
+  '.tsx',
+  '.rb',
+  '.go',
+  '.sql',
+  '.yaml',
+  '.yml',
+  '.json',
+  '.md',
+  '.txt',
+]);
+
 const BUILTIN_IMMUNE_RULES: BuiltinImmuneRule[] = [
   {
     ruleId: 'IMM001',
@@ -31,7 +57,7 @@ const BUILTIN_IMMUNE_RULES: BuiltinImmuneRule[] = [
     vector: 'prompt-injection',
     severity: 'critical',
     regex:
-      /(?:ignore\s+(?:all\s+)?(?:previous|prior|above)\s+(?:instructions?|rules?|prompts?)|disregard\s+system\s+prompt|you\s+are\s+now\s+in\s+(?:developer|unrestricted|dan)\s+mode|忽略(?:之前|以上|所有)(?:的)?(?:指令|规则|系统提示))/i,
+      /(?:ignore\s+(?:all\s+)?(?:previous|prior|above)\s+(?:instructions?|rules?|prompts?)|disregard\s+(?:all\s+)?system\s+prompts?|you\s+are\s+now\s+in\s+(?:developer|unrestricted|dan)\s+mode|忽略(?:之前|以上|所有)(?:的)?(?:指令|规则|系统提示))/i,
     title: 'Prompt injection / instruction override attempt',
     recommendation:
       'Quarantine this skill immediately and inspect why it tries to override system or user instructions.',
@@ -42,21 +68,21 @@ const BUILTIN_IMMUNE_RULES: BuiltinImmuneRule[] = [
     vector: 'exfiltration',
     severity: 'critical',
     regex:
-      /(?:(?:curl|wget|invoke-webrequest|fetch)\b[^\n]{0,160}(?:~\/\.ssh|~\/\.aws|id_rsa|\.env\b|credentials|token|secret|passwd|api[_-]?key)|(?:cat|type|read)\s+(?:~\/\.ssh\/id_rsa|~\/\.aws\/credentials|\/etc\/shadow)|exfiltrate|send\s+(?:all\s+)?(?:secrets?|env\s+vars?|keys?)\s+to\s+https?:\/\/)/i,
+      /(?:(?:curl|wget|invoke-webrequest)\b[^\n]{0,140}(?:~\/\.ssh|~\/\.aws|id_rsa|\/etc\/shadow|\/etc\/passwd|\.env\b|-d\s+['"]?\$\(|--data[^\s]*\s+['"]?\$\(|printenv)|(?:cat|type|head|tail)\s+(?:~\/\.ssh\/id_rsa|~\/\.aws\/credentials|\/etc\/shadow)|\bexfiltrate\b|send\s+(?:all\s+)?(?:secrets?|env\s+vars?|api\s+keys?|private\s+keys?)\s+to\s+https?:\/\/)/i,
     title: 'Potential credential harvesting or outbound data exfiltration',
     recommendation:
       'Block outbound transmission of local credentials/env files and verify every external endpoint.',
   },
   {
     ruleId: 'IMM003',
-    name: 'Destructive Shell / Remote Pipe Execution',
+    name: 'Destructive Shell / Unverified Remote Pipe',
     vector: 'destructive-exec',
     severity: 'critical',
     regex:
-      /(?:\brm\s+-rf\s+(?:\/|~|\*|\.\.)|\bcurl\s+[^\n|]{4,140}\|\s*(?:sh|bash|zsh)\b|\bwget\s+[^\n|]{4,140}\|\s*(?:sh|bash)\b|invoke-expression\s*\(\s*(?:irm|iwr|invoke-restmethod)|\bformat\s+[a-z]:|\bdd\s+if=.*of=\/dev\/)/i,
-    title: 'Destructive command or unverified remote script pipe execution',
+      /(?:\brm\s+-rf\s+(?:\/|~|\*|\.\.)|\b(?:curl|wget)\s+http:\/\/[^\n|]{4,140}\|\s*(?:sh|bash|zsh)\b|invoke-expression\s*\(\s*(?:irm|iwr|invoke-restmethod)\s+['"]?http:\/\/|\bformat\s+[a-z]:|\bdd\s+if=.*of=\/dev\/)/i,
+    title: 'Destructive command or unencrypted remote script pipe execution',
     recommendation:
-      'Never pipe remote URLs directly into a shell or execute recursive root deletions inside a skill.',
+      'Never pipe unverified remote URLs directly into a shell or execute recursive root deletions inside a skill.',
   },
   {
     ruleId: 'IMM004',
@@ -64,7 +90,7 @@ const BUILTIN_IMMUNE_RULES: BuiltinImmuneRule[] = [
     vector: 'tool-poisoning',
     severity: 'high',
     regex:
-      /(?:<!--[\s\S]{0,240}(?:system|override|secret|exfiltrate|ignore|always\s+run|hidden\s+instruction)[\s\S]{0,240}-->|<IMPORTANT>[\s\S]{0,240}(?:do\s+not\s+tell\s+the\s+user|hide\s+from\s+user|silently\s+execute))/i,
+      /(?:<!--(?:(?!-->)[\s\S]){0,220}(?:system\s+prompt|override\s+instructions?|exfiltrate|ignore\s+previous|hidden\s+instruction|silently\s+execute|do\s+not\s+tell\s+the\s+user)(?:(?!-->)[\s\S]){0,220}-->|<IMPORTANT>(?:(?!<\/IMPORTANT>)[\s\S]){0,220}(?:do\s+not\s+tell\s+the\s+user|hide\s+from\s+user|silently\s+execute))/i,
     title: 'Hidden instruction or covert MCP tool-poisoning directive',
     recommendation:
       'Remove concealed HTML comments or directives instructing the agent to act silently without informing the user.',
@@ -74,7 +100,7 @@ const BUILTIN_IMMUNE_RULES: BuiltinImmuneRule[] = [
     name: 'Unicode Smuggling / Bidi Spoofing',
     vector: 'unicode-smuggling',
     severity: 'high',
-    regex: /[\u202A-\u202E\u2066-\u2069\u200B\u200C\u200D\uFEFF]{3,}|[\u202E\u2066-\u2069]/,
+    regex: /[\u202A-\u202E\u2066-\u2069\u200B\u200C\u200D]{3,}|[\u202E\u2066-\u2069]/,
     title: 'Suspicious zero-width characters or Unicode bidirectional override detected',
     recommendation:
       'Inspect raw bytes of the file; hidden bidi/zero-width characters can disguise malicious instructions.',
@@ -95,10 +121,20 @@ const BUILTIN_IMMUNE_RULES: BuiltinImmuneRule[] = [
     vector: 'destructive-exec',
     severity: 'high',
     regex:
-      /(?:>>\s*~\/\.(?:bashrc|zshrc|profile)|crontab\s+-|HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run|schtasks\s+\/create)/i,
+      /(?:>>\s*~\/\.(?:bashrc|zshrc|profile)|crontab\s+-[elr]|HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run|schtasks\s+\/create)/i,
     title: 'Attempts to modify shell startup profiles or OS scheduled persistence',
     recommendation:
-      'Skills should not silently modify login scripts, cron jobs, or Windows startup registry keys.',
+      'Review whether this skill legitimately manages OS schedules/startup tasks before approving.',
+  },
+  {
+    ruleId: 'IMM008',
+    name: 'Remote HTTPS Installer Pipe',
+    vector: 'destructive-exec',
+    severity: 'medium',
+    regex: /\b(?:curl|wget)\s+[^\n|]*https:\/\/[^\n|]{4,140}\|\s*(?:sh|bash|zsh)\b/i,
+    title: 'Remote HTTPS install script piped to shell (review origin before running)',
+    recommendation:
+      'Verify the installer URL domain and pin a checksum or version tag rather than piping mutable scripts directly to bash.',
   },
 ];
 
@@ -147,11 +183,16 @@ export function scanContentForThreats(
   for (const rule of BUILTIN_IMMUNE_RULES) {
     const match = rule.regex.exec(text);
     if (match && match.index !== undefined) {
+      // Elevate unknown-origin HTTPS shell pipes to high, keep well-known official installers as medium caution
+      const severity =
+        rule.ruleId === 'IMM008' && !TRUSTED_INSTALLER_DOMAINS_RE.test(match[0])
+          ? 'high'
+          : rule.severity;
       seq += 1;
       findings.push({
         id: `imm_${meta.targetId}_${rule.ruleId}_${seq}`,
         ruleId: rule.ruleId,
-        severity: rule.severity,
+        severity,
         vector: rule.vector,
         targetId: meta.targetId,
         targetName: meta.targetName,
@@ -221,10 +262,12 @@ export function runImmuneWorkspaceAudit(
       customAntibodies,
     );
 
-    // Also inspect bundled scripts/ inside the skill directory
+    // Also inspect bundled text/code scripts/ inside the skill directory (skip binary assets like .png/.pdf)
     const skillDir = path.dirname(skill.filePath);
     for (const res of skill.resources) {
       if (res.category !== 'scripts' || res.bytes > 256 * 1024) continue;
+      const ext = path.extname(res.relativePath).toLowerCase();
+      if (!TEXT_SCRIPT_EXTS.has(ext)) continue;
       const absScript = path.join(skillDir, res.relativePath);
       try {
         const scriptContent = fs.readFileSync(absScript, 'utf8');

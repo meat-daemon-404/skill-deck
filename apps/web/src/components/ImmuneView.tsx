@@ -45,6 +45,7 @@ export function ImmuneView({
 }: ImmuneViewProps) {
   const { t } = useI18n();
   const [subTab, setSubTab] = useState<'pitfalls' | 'security' | 'sandbox'>('pitfalls');
+  const [onlyFlaggedSkills, setOnlyFlaggedSkills] = useState(true);
 
   // New pitfall distillation form (agent-immune compatible: trigger -> avoid -> do)
   const [triggerPattern, setTriggerPattern] = useState('');
@@ -433,12 +434,33 @@ export function ImmuneView({
           )}
 
           <article className="card">
-            <h2 className="card-title">
-              <ShieldAlert size={17} aria-hidden="true" />
-              {t('静态 ToxicSkills 毒技能与脚本体检结果', 'Static ToxicSkills & Script Security Audit')}
-            </h2>
+            <div className="card-header">
+              <h2 className="card-title">
+                <ShieldAlert size={17} aria-hidden="true" />
+                {t('静态 ToxicSkills 毒技能与脚本体检结果', 'Static ToxicSkills & Script Security Audit')}
+              </h2>
+              <div className="segmented" role="group" aria-label={t('筛选体检结果', 'Filter audit results')}>
+                <button
+                  type="button"
+                  aria-pressed={onlyFlaggedSkills}
+                  onClick={() => setOnlyFlaggedSkills(true)}
+                >
+                  {t(`仅看风险项 (${immune.quarantineCount + immune.cautionCount})`, `Flagged Only (${immune.quarantineCount + immune.cautionCount})`)}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={!onlyFlaggedSkills}
+                  onClick={() => setOnlyFlaggedSkills(false)}
+                >
+                  {t(`全部技能 (${immune.skillReports.length})`, `All (${immune.skillReports.length})`)}
+                </button>
+              </div>
+            </div>
             <div className="stack-sm">
-              {immune.skillReports.map((rep) => {
+              {(onlyFlaggedSkills
+                ? immune.skillReports.filter((r) => r.verdict !== 'safe')
+                : immune.skillReports.slice(0, 80)
+              ).map((rep) => {
                 const skillObj = skillMap.get(rep.skillId);
                 const badgeClass =
                   rep.verdict === 'quarantine'

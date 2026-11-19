@@ -290,7 +290,7 @@ export function lintWorkspace(
     }
   }
 
-  // Compute size-aware 0–100 Health Score so large 200+ skill setups still get an actionable gradient
+  // Compute density-normalized 0–100 Health Score so both 10-skill and 600-skill setups get an actionable gradient
   const errorCount = issues.filter((i) => i.severity === 'error').length;
   const warningCount = issues.filter((i) => i.severity === 'warning').length;
   const infoCount = issues.filter((i) => i.severity === 'info').length;
@@ -299,15 +299,16 @@ export function lintWorkspace(
   ).length;
   const highConflictCount = conflicts.filter((c) => c.severity === 'high').length;
 
-  const assetScale = Math.max(1, (skills.length + mcpServers.length) / 14);
-  const rawPenalty =
-    errorCount * 10 +
-    warningCount * 3.5 +
-    infoCount * 0.75 +
-    highConflictCount * 5;
-  // Security errors (hardcoded secrets) always apply an unscaled baseline penalty
-  const normalizedPenalty = Math.round(rawPenalty / Math.sqrt(assetScale) + securityErrorCount * 6);
-  const healthScore = Math.max(0, Math.min(100, 100 - normalizedPenalty));
+  const assetBase = Math.max(12, skills.length + mcpServers.length);
+  const weightedIssues =
+    errorCount * 9 +
+    warningCount * 2.4 +
+    infoCount * 0.4 +
+    Math.min(highConflictCount, assetBase) * 3.5;
+  const issueDensity = weightedIssues / assetBase;
+  const baseScore = Math.round(100 * Math.exp(-issueDensity * 0.16));
+  // Hardcoded secret security errors always impose a direct unscaled penalty
+  const healthScore = Math.max(0, Math.min(100, baseScore - securityErrorCount * 9));
 
   // Sort errors first, then warnings, then info
   const order = { error: 0, warning: 1, info: 2 };

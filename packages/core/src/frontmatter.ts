@@ -90,7 +90,14 @@ export function extractLocalLinks(markdown: string): string[] {
       continue;
     }
     const cleanPath = rawTarget.split('#')[0]?.split('?')[0] ?? '';
-    if (cleanPath && !cleanPath.includes('{{') && !cleanPath.includes('<')) {
+    if (
+      cleanPath &&
+      !cleanPath.includes('{{') &&
+      !cleanPath.includes('${') &&
+      !cleanPath.includes('<') &&
+      !/^(?:url|link|href|path|file|image|src)$/i.test(cleanPath) &&
+      !/^\/(?:absolute|path\/to|your-project)\//i.test(cleanPath)
+    ) {
       links.add(cleanPath);
     }
   }

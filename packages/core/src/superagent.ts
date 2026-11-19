@@ -219,18 +219,21 @@ export async function createSuperAgentPlan(params: {
   // Pick relevant active MCP servers by simple keyword relevance against goal
   const goalLower = goal.toLowerCase();
   const activeMcps = params.report.mcpServers.filter((m) => !m.disabled);
-  const selectedMcps = activeMcps
-    .filter((m) => {
-      const nameLower = m.name.toLowerCase();
-      if (goalLower.includes(nameLower)) return true;
-      if (/(github|pr|issue|repo|代码|提交|仓库)/.test(goalLower) && nameLower.includes('github')) return true;
-      if (/(sql|postgres|supabase|rls|数据库|表)/.test(goalLower) && /(postgres|supabase)/.test(nameLower)) return true;
-      if (/(doc|api|gemini|文档)/.test(goalLower) && /(doc|context7|gemini)/.test(nameLower)) return true;
-      if (/(memory|记忆|历史)/.test(goalLower) && nameLower.includes('memory')) return true;
-      return false;
-    })
-    .slice(0, 2)
-    .map((m) => m.name);
+  const selectedMcps = Array.from(
+    new Set(
+      activeMcps
+        .filter((m) => {
+          const nameLower = m.name.toLowerCase();
+          if (goalLower.includes(nameLower)) return true;
+          if (/(github|pr|issue|repo|代码|提交|仓库)/.test(goalLower) && nameLower.includes('github')) return true;
+          if (/(sql|postgres|supabase|rls|数据库|表)/.test(goalLower) && /(postgres|supabase)/.test(nameLower)) return true;
+          if (/(doc|api|gemini|文档)/.test(goalLower) && /(doc|context7|gemini)/.test(nameLower)) return true;
+          if (/(memory|记忆|历史)/.test(goalLower) && nameLower.includes('memory')) return true;
+          return false;
+        })
+        .map((m) => m.name),
+    ),
+  ).slice(0, 2);
 
   // Build steps + matching WorkflowGraph
   const steps: SuperAgentStep[] = [];

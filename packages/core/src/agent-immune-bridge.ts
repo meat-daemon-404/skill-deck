@@ -174,12 +174,34 @@ export function getDefaultAgentImmuneStores(extraRoots: string[] = []): Array<{
     add(path.join(root, 'immune.sqlite'), 'sqlite');
   }
 
-  // Standard `meat-daemon-404/agent-immune` local database & rules locations
+  // Standard `meat-daemon-404/agent-immune` local database & rules locations across DSH, ZCode, Antigravity & Codex
   add(path.join(home, '.dsh', 'immune.sqlite'), 'sqlite');
+  add(path.join(home, '.gemini', 'config', '.dsh', 'immune.sqlite'), 'sqlite');
   add(path.join(home, '.zcode', 'immune.sqlite'), 'sqlite');
   add(path.join(home, '.agent-immune', 'immune.sqlite'), 'sqlite');
   add(path.join(home, '.immune', 'rules.jsonl'), 'jsonl');
   add(path.join(home, '.skilldeck', 'immune', 'rules.jsonl'), 'jsonl');
+
+  // Dynamically scan ZCode & DSH plugin data directories (e.g. ~/.zcode/cli/plugins/data/dsh-immune-system@*/immune.sqlite)
+  const pluginDataDirs = [
+    path.join(home, '.zcode', 'cli', 'plugins', 'data'),
+    path.join(home, '.dsh', 'plugins'),
+    path.join(home, '.dsh', 'storages'),
+  ];
+  for (const dataDir of pluginDataDirs) {
+    if (!fs.existsSync(dataDir)) continue;
+    try {
+      for (const entry of fs.readdirSync(dataDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        const candidate = path.join(dataDir, entry.name, 'immune.sqlite');
+        if (fs.existsSync(candidate)) {
+          add(candidate, 'sqlite');
+        }
+      }
+    } catch {
+      // Ignore unreadable plugin data dir
+    }
+  }
 
   return stores;
 }
