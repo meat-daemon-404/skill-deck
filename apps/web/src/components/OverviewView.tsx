@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import type { SkillRecord, WorkspaceReport } from '@skilldeck/core';
+import { maskLocalHomePath } from '../api.js';
 import { useI18n } from '../i18n.js';
 
 interface OverviewViewProps {
@@ -303,7 +304,7 @@ export function OverviewView({ report, onInspectSkill, onNavigate }: OverviewVie
                 }}
               >
                 <span className="truncate-line mono" style={{ fontSize: '0.76rem' }}>
-                  {src.rootPath}
+                  {maskLocalHomePath(src.rootPath)}
                 </span>
                 <span className={`badge ${src.exists ? 'badge-ok' : 'badge-neutral'}`}>
                   {src.exists ? `${src.skillCount}S / ${src.mcpCount}M` : t('未找到', 'not found')}

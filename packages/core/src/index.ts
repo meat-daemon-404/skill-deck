@@ -38,6 +38,7 @@ export * from './immune.js';
 export * from './agent-immune-bridge.js';
 export * from './vault.js';
 export * from './superagent.js';
+export * from './superagent-loop.js';
 
 export function computeTokenBudget(
   skills: SkillRecord[],

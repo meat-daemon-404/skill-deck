@@ -7,11 +7,14 @@ import {
   detectLocalAgents,
   executeWorkflowGraph,
   exportBundle,
+  probeLlmEndpoint,
+  runSuperAgentToolLoop,
   simulatePromptRouting,
   type ExportTarget,
+  type OpenAiToolDef,
   type ScanOptions,
 } from '@skilldeck/core';
-import { startStdioMcpHubServer } from '@skilldeck/hub';
+import { HUB_META_TOOLS, SkillDeckHub, startStdioMcpHubServer } from '@skilldeck/hub';
 import {
   resolveDefaultDemoWorkspace,
   startSkillDeckServer,
@@ -41,6 +44,8 @@ const VALUE_FLAGS = new Set([
   'host',
   'threshold',
   'limit',
+  'endpoint',
+  'model',
 ]);
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -267,6 +272,74 @@ async function main(): Promise<void> {
     if (immune.quarantineCount > 0 && flags.strict) {
       process.exitCode = 1;
     }
+    return;
+  }
+
+  if (command === 'chat') {
+    const goal = positionals.join(' ').trim();
+    if (!goal) {
+      console.error(c.red('Error: Provide a prompt, e.g. skilldeck chat --local "帮我检查本机冲突技能"'));
+      process.exitCode = 1;
+      return;
+    }
+    const endpoint =
+      typeof flags.endpoint === 'string'
+        ? flags.endpoint
+        : process.env.SKILLDECK_LLM_BASE_URL || 'http://127.0.0.1:11434/v1';
+    let model =
+      typeof flags.model === 'string'
+        ? flags.model
+        : process.env.SKILLDECK_LLM_MODEL || '';
+    const apiKey = process.env.SKILLDECK_LLM_API_KEY || undefined;
+
+    if (!model) {
+      const probed = await probeLlmEndpoint(endpoint, apiKey, 3000);
+      model = probed.ok && probed.models[0] ? probed.models[0] : 'gpt-4o-mini';
+    }
+
+    const hub = new SkillDeckHub();
+    const tools: OpenAiToolDef[] = HUB_META_TOOLS.map((t) => ({
+      type: 'function',
+      function: { name: t.name, description: t.description, parameters: t.inputSchema },
+    }));
+
+    const chatRes = await runSuperAgentToolLoop({
+      goal,
+      llm: { endpoint, model, apiKey, maxTurns: 6 },
+      tools,
+      report,
+      executeTool: async (toolName, args) => {
+        const exec = await hub.executeMetaTool(toolName, args, scanOpts, 'superagent');
+        return {
+          ok: exec.ok,
+          contentText: exec.contentText,
+          durationMs: exec.trace.durationMs,
+          immuneAction: exec.trace.immuneAction,
+        };
+      },
+    });
+
+    if (asJson) {
+      console.log(JSON.stringify(chatRes, null, 2));
+      return;
+    }
+    if (!chatRes.ok) {
+      console.error(c.red(`SuperAgent Error (${endpoint} / ${model}): ${chatRes.error}`));
+      process.exitCode = 1;
+      return;
+    }
+    console.log(
+      `\n${c.bold('SuperAgent Live Response')} ${c.dim(`(${chatRes.model} · ${chatRes.mode} · ${chatRes.turns} turns · ${chatRes.totalDurationMs}ms · ${chatRes.usage.totalTokens}t)`)}\n`,
+    );
+    if (chatRes.toolTraces.length > 0) {
+      console.log(c.bold('Tool Calls Executed:'));
+      for (const tr of chatRes.toolTraces) {
+        console.log(`  • [T${tr.turn}] ${c.cyan(tr.toolName)} (${tr.durationMs}ms, immune=${tr.immuneAction})`);
+      }
+      console.log('');
+    }
+    console.log(chatRes.finalAnswer);
+    console.log('');
     return;
   }
 

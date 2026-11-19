@@ -1,6 +1,6 @@
 {
   "name": "skill-deck-monorepo",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "SkillDeck — Local-first SuperAgent Control Tower, MCP Aggregation Hub, Agent-Immune Shield & Skill Vault",
   "license": "MIT",

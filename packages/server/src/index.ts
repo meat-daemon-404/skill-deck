@@ -15,18 +15,21 @@ import {
   getVaultStatus,
   importSkillsToVault,
   previewVaultSync,
+  probeLlmEndpoint,
   recallPitfallAntibodies,
   rollbackVaultTransaction,
+  runSuperAgentToolLoop,
   scanContentForThreats,
   simulatePromptRouting,
   toggleSkillFileState,
   type ExportTarget,
   type ImmuneAntibody,
+  type OpenAiToolDef,
   type ScanOptions,
   type SuperAgentLlmConfig,
   type WorkflowGraph,
 } from '@skilldeck/core';
-import { SkillDeckHub } from '@skilldeck/hub';
+import { HUB_META_TOOLS, SkillDeckHub } from '@skilldeck/hub';
 
 export interface ServerOptions {
   port?: number;
@@ -690,6 +693,77 @@ export function createSkillDeckServer(options: ServerOptions = {}): http.Server 
       if (req.method === 'GET' && pathname === '/api/superagent/agents') {
         const agents = await detectLocalAgents();
         sendJson(res, 200, { agents });
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/superagent/probe-llm') {
+        const body = await readJsonBody<{ endpoint?: string; apiKey?: string }>(req);
+        const endpoint = body.endpoint?.trim() || 'http://127.0.0.1:11434/v1';
+        const result = await probeLlmEndpoint(endpoint, body.apiKey);
+        sendJson(res, 200, result);
+        return;
+      }
+
+      if (req.method === 'POST' && pathname === '/api/superagent/chat') {
+        const body = await readJsonBody<{
+          goal?: string;
+          endpoint?: string;
+          model?: string;
+          apiKey?: string;
+          maxTurns?: number;
+          mode?: string;
+          paths?: string[];
+          includeBuiltin?: boolean;
+        }>(req);
+
+        if (!body.goal?.trim()) {
+          sendJson(res, 400, { error: '`goal` is required.' });
+          return;
+        }
+        if (!body.endpoint?.trim() || !body.model?.trim()) {
+          sendJson(res, 400, { error: 'Both `endpoint` and `model` are required for Live SuperAgent Chat.' });
+          return;
+        }
+
+        const scanOpts = buildScanOptions(
+          body.mode,
+          body.paths,
+          Boolean(body.includeBuiltin),
+          demoWorkspacePath,
+          defaultMode,
+          hub.getCustomAntibodies(),
+        );
+        const report = await analyzeWorkspaceAsync(scanOpts);
+        const tools: OpenAiToolDef[] = HUB_META_TOOLS.map((t) => ({
+          type: 'function',
+          function: {
+            name: t.name,
+            description: t.description,
+            parameters: t.inputSchema,
+          },
+        }));
+
+        const result = await runSuperAgentToolLoop({
+          goal: body.goal.trim(),
+          llm: {
+            endpoint: body.endpoint.trim(),
+            model: body.model.trim(),
+            apiKey: body.apiKey?.trim() || undefined,
+            maxTurns: body.maxTurns ?? 6,
+          },
+          tools,
+          report,
+          executeTool: async (toolName, args) => {
+            const exec = await hub.executeMetaTool(toolName, args, scanOpts, 'superagent');
+            return {
+              ok: exec.ok,
+              contentText: exec.contentText,
+              durationMs: exec.trace.durationMs,
+              immuneAction: exec.trace.immuneAction,
+            };
+          },
+        });
+        sendJson(res, 200, result);
         return;
       }
 

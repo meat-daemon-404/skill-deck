@@ -7,9 +7,11 @@ import type {
   ImmuneAntibody,
   ImmuneFinding,
   ImmuneVerdict,
+  LlmProbeResult,
   PitfallAntibody,
   QuarantineItem,
   RouteResult,
+  SuperAgentChatResult,
   SuperAgentLlmConfig,
   SuperAgentPlan,
   VaultStatus,
@@ -278,4 +280,38 @@ export async function createSuperAgentPlanApi(params: {
     llmConfig: params.llmConfig,
     ...queryBodyFields(params.query),
   });
+}
+
+export async function probeLlmEndpointApi(
+  endpoint: string,
+  apiKey?: string,
+): Promise<LlmProbeResult> {
+  return postJson('/api/superagent/probe-llm', { endpoint, apiKey });
+}
+
+export async function runSuperAgentChatApi(params: {
+  goal: string;
+  endpoint: string;
+  model: string;
+  apiKey?: string;
+  maxTurns?: number;
+  query: WorkspaceQuery;
+}): Promise<SuperAgentChatResult> {
+  return postJson('/api/superagent/chat', {
+    goal: params.goal,
+    endpoint: params.endpoint,
+    model: params.model,
+    apiKey: params.apiKey,
+    maxTurns: params.maxTurns,
+    ...queryBodyFields(params.query),
+  });
+}
+
+/**
+ * Masks local OS home directory usernames (`C:\Users\name\...` -> `~/...`) before rendering in UI.
+ */
+export function maskLocalHomePath(p: string): string {
+  return p
+    .replace(/^[A-Za-z]:[\\/]Users[\\/][^\\/]+/i, '~')
+    .replace(/^\/(?:Users|home)\/[^/]+/, '~');
 }

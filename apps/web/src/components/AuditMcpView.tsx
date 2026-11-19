@@ -10,6 +10,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import type { LintIssue, LintSeverity, McpServerRecord } from '@skilldeck/core';
+import { maskLocalHomePath } from '../api.js';
 import { useI18n } from '../i18n.js';
 
 interface AuditMcpViewProps {
@@ -134,7 +135,7 @@ export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
                   )}
 
                   <div className="row-wrap muted mono" style={{ justifyContent: 'space-between', fontSize: '0.72rem' }}>
-                    <span className="truncate-line" style={{ maxInlineSize: '72%' }}>{srv.configPath}</span>
+                    <span className="truncate-line" style={{ maxInlineSize: '72%' }}>{maskLocalHomePath(srv.configPath)}</span>
                     <span>~{srv.estimatedSchemaTokens}t</span>
                   </div>
                 </div>
@@ -207,7 +208,7 @@ export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
                     <span className="badge badge-neutral">{issue.category}</span>
                   </div>
                   <span className="mono muted truncate-line" style={{ fontSize: '0.73rem', maxInlineSize: '360px' }}>
-                    {issue.filePath}
+                    {maskLocalHomePath(issue.filePath)}
                   </span>
                 </div>
                 <p style={{ fontSize: '0.85rem' }}>{issue.message}</p>

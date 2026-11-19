@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -17,9 +18,12 @@ import {
   importSkillsToVault,
   parseSkillMarkdown,
   previewVaultSync,
+  probeLlmEndpoint,
   recallPitfallAntibodies,
   redactMcpEnvironment,
   rollbackVaultTransaction,
+  runSuperAgentToolLoop,
+  sanitizeDisplayPath,
   sanitizeImmuneDelimiter,
   simulatePromptRouting,
   synthesizeAntibody,
@@ -349,5 +353,108 @@ describe('@skilldeck/core — Agent-Immune dual layer, Vault rollback & SuperAge
     });
     expect(blockedRun.status).toBe('blocked');
     expect(blockedRun.steps.some((s) => s.status === 'quarantined')).toBe(true);
+  });
+
+  it('probes an OpenAI-compatible gateway and completes a multi-turn SuperAgent tool-calling loop', async () => {
+    let callCount = 0;
+    const mockGateway = http.createServer((req, res) => {
+      if (req.url === '/v1/models') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ data: [{ id: 'group/default' }, { id: 'auto/fast-model' }] }));
+        return;
+      }
+      if (req.url === '/v1/chat/completions') {
+        callCount += 1;
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        if (callCount === 1) {
+          res.end(
+            JSON.stringify({
+              choices: [
+                {
+                  message: {
+                    role: 'assistant',
+                    content: null,
+                    tool_calls: [
+                      {
+                        id: 'call_1',
+                        type: 'function',
+                        function: {
+                          name: 'skilldeck_recall_immune',
+                          arguments: JSON.stringify({ query: 'PowerShell &&' }),
+                        },
+                      },
+                    ],
+                  },
+                },
+              ],
+              usage: { prompt_tokens: 120, completion_tokens: 24, total_tokens: 144 },
+            }),
+          );
+          return;
+        }
+        res.end(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  role: 'assistant',
+                  content: 'Verified via immune memory: use `; if ($LASTEXITCODE -ne 0)` in PowerShell 5.1.',
+                },
+              },
+            ],
+            usage: { prompt_tokens: 180, completion_tokens: 30, total_tokens: 210 },
+          }),
+        );
+        return;
+      }
+      res.writeHead(404);
+      res.end();
+    });
+
+    await new Promise<void>((resolve) => mockGateway.listen(0, '127.0.0.1', () => resolve()));
+    const addr = mockGateway.address();
+    const port = typeof addr === 'object' && addr ? addr.port : 0;
+    const baseUrl = `http://127.0.0.1:${port}/v1`;
+
+    try {
+      const probe = await probeLlmEndpoint(baseUrl);
+      expect(probe.ok).toBe(true);
+      expect(probe.models[0]).toBe('group/default');
+
+      const loop = await runSuperAgentToolLoop({
+        goal: 'Check PowerShell chaining pitfall',
+        llm: { endpoint: baseUrl, model: 'group/default', maxTurns: 4 },
+        tools: [
+          {
+            type: 'function',
+            function: {
+              name: 'skilldeck_recall_immune',
+              description: 'Recall pitfall antibodies',
+              parameters: { type: 'object', properties: { query: { type: 'string' } } },
+            },
+          },
+        ],
+        report,
+        executeTool: async (name) => ({
+          ok: true,
+          contentText: `<immune_memory>Use ; instead of && (${name})</immune_memory>`,
+          durationMs: 2,
+          immuneAction: 'allow',
+        }),
+      });
+
+      expect(loop.ok).toBe(true);
+      expect(loop.turns).toBe(2);
+      expect(loop.toolTraces).toHaveLength(1);
+      expect(loop.toolTraces[0]?.toolName).toBe('skilldeck_recall_immune');
+      expect(loop.usage.totalTokens).toBe(354);
+      expect(loop.finalAnswer).toContain('PowerShell');
+
+      // Path privacy masking check
+      const masked = sanitizeDisplayPath(path.join(os.homedir(), '.dsh', 'immune.sqlite'));
+      expect(masked).toBe('~/.dsh/immune.sqlite');
+    } finally {
+      await new Promise<void>((resolve) => mockGateway.close(() => resolve()));
+    }
   });
 });

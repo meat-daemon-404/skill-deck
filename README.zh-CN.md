@@ -39,7 +39,7 @@ pnpm demo
   "mcpServers": {
     "skilldeck-hub": {
       "command": "node",
-      "args": ["D:/explore/ai-infra/skill-deck/packages/cli/dist/cli.js", "hub", "--local"]
+      "args": ["<path-to-skill-deck>/packages/cli/dist/cli.js", "hub", "--local"]
     }
   }
 }

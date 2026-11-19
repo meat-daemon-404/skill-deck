@@ -10,7 +10,7 @@ import {
   X,
 } from 'lucide-react';
 import type { AgentPlatform, ImmuneSkillReport, LintIssue, SkillRecord } from '@skilldeck/core';
-import type { WorkspaceQuery } from '../api.js';
+import { maskLocalHomePath, type WorkspaceQuery } from '../api.js';
 import { useI18n } from '../i18n.js';
 import { VaultPanel } from './VaultPanel.js';
 
@@ -312,7 +312,7 @@ export function SkillsView({
                   <span className="badge badge-neutral">{inspectedSkill.kind}</span>
                 </div>
                 <p className="muted mono truncate-line" style={{ fontSize: '0.75rem', marginBlockStart: '0.2rem' }}>
-                  {inspectedSkill.filePath}
+                  {maskLocalHomePath(inspectedSkill.filePath)}
                 </p>
               </div>
               <form method="dialog">

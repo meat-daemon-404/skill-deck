@@ -407,9 +407,46 @@ export interface DetectedLocalAgent {
   command: string;
   available: boolean;
   resolvedPath?: string;
+  endpoint?: string;
   capabilities: string[];
   models?: string[];
   statusNote: string;
+}
+
+export interface LlmProbeResult {
+  ok: boolean;
+  endpoint: string;
+  latencyMs: number;
+  models: string[];
+  error?: string;
+}
+
+export interface SuperAgentToolTrace {
+  turn: number;
+  toolName: string;
+  arguments: Record<string, unknown>;
+  ok: boolean;
+  durationMs: number;
+  immuneAction: ImmuneFirewallDecision['action'];
+  resultPreview: string;
+}
+
+export interface SuperAgentChatResult {
+  ok: boolean;
+  goal: string;
+  endpoint: string;
+  model: string;
+  mode: 'tool-calling' | 'context-injected';
+  turns: number;
+  totalDurationMs: number;
+  usage: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
+  toolTraces: SuperAgentToolTrace[];
+  finalAnswer: string;
+  error?: string;
 }
 
 export interface SuperAgentStep {

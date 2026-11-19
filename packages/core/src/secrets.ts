@@ -1,4 +1,20 @@
+import os from 'node:os';
 import type { SecretFinding } from './types.js';
+
+/**
+ * Replaces the local OS home directory prefix with `~` so usernames never leak into UI screenshots or exports.
+ */
+export function sanitizeDisplayPath(filePath: string): string {
+  if (!filePath) return filePath;
+  const home = os.homedir();
+  if (!home) return filePath;
+  const normHome = home.replace(/\\/g, '/').replace(/\/+$/, '');
+  const normPath = filePath.replace(/\\/g, '/');
+  if (normPath.toLowerCase().startsWith(normHome.toLowerCase())) {
+    return `~${normPath.slice(normHome.length)}`;
+  }
+  return filePath;
+}
 
 interface SecretPattern {
   name: string;

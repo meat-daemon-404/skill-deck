@@ -263,7 +263,7 @@ export function App() {
             <Layers size={19} />
           </div>
           <div>
-            <div className="brand-title">SkillDeck v0.2</div>
+            <div className="brand-title">SkillDeck v0.3</div>
             <div className="brand-sub">
               {t('SuperAgent 超级总控 · MCP 聚合网关 · Agent-Immune 双层免疫', 'SuperAgent Control Tower · MCP Hub · Agent-Immune Shield')}
             </div>

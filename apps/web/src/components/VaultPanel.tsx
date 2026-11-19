@@ -11,6 +11,7 @@ import {
   applyVaultSyncApi,
   fetchVaultStatus,
   importToVaultApi,
+  maskLocalHomePath,
   previewVaultSyncApi,
   rollbackVaultApi,
   type WorkspaceQuery,
@@ -114,8 +115,8 @@ export function VaultPanel({ query, onRefreshWorkspace }: VaultPanelProps) {
           </h2>
           <p className="card-subtitle">
             {t(
-              `单一真源目录：${vault?.vaultRoot ?? '~/.skilldeck/vault'} · 所有同步、隔离、启停操作均自动备份并支持一键撤销。`,
-              `Single source of truth: ${vault?.vaultRoot ?? '~/.skilldeck/vault'} · Every sync/disable/quarantine records backups for 1-click undo.`,
+              `单一真源目录：${vault?.vaultRoot ? maskLocalHomePath(vault.vaultRoot) : '~/.skilldeck/vault'} · 所有同步、隔离、启停操作均自动备份并支持一键撤销。`,
+              `Single source of truth: ${vault?.vaultRoot ? maskLocalHomePath(vault.vaultRoot) : '~/.skilldeck/vault'} · Every sync/disable/quarantine records backups for 1-click undo.`,
             )}
           </p>
         </div>

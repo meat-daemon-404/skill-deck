@@ -24,6 +24,7 @@ const AGENT_PROFILES: Array<{
   id: string;
   name: string;
   command: string;
+  endpoint?: string;
   capabilities: string[];
 }> = [
   {
@@ -36,6 +37,7 @@ const AGENT_PROFILES: Array<{
     id: 'ollama',
     name: 'Ollama Local LLM',
     command: 'ollama',
+    endpoint: 'http://127.0.0.1:11434/v1',
     capabilities: ['100% offline local inference', 'Zero API cost', 'OpenAI-compatible API'],
   },
   {
@@ -89,15 +91,17 @@ export async function detectLocalAgents(): Promise<DetectedLocalAgent[]> {
   const ollamaModels = await probeOllamaModels();
 
   return AGENT_PROFILES.map((profile) => {
-    const available = Boolean(isExecutableOnPath(profile.command));
-    let statusNote = available ? 'Detected on PATH' : 'Not installed on PATH';
+    const cmdAvailable = Boolean(isExecutableOnPath(profile.command));
+    let available = cmdAvailable;
+    let statusNote = cmdAvailable ? 'Detected on PATH' : 'Not installed on PATH';
     let models: string[] | undefined;
 
     if (profile.id === 'ollama') {
       if (ollamaModels.length > 0) {
+        available = true;
         models = ollamaModels;
         statusNote = `Running locally (${ollamaModels.length} model(s) ready)`;
-      } else if (available) {
+      } else if (cmdAvailable) {
         statusNote = 'Installed (start `ollama serve` to enable local LLM synthesis)';
       }
     }
@@ -106,7 +110,8 @@ export async function detectLocalAgents(): Promise<DetectedLocalAgent[]> {
       id: profile.id,
       name: profile.name,
       command: profile.command,
-      available: profile.id === 'ollama' ? available || ollamaModels.length > 0 : available,
+      available,
+      endpoint: profile.endpoint,
       capabilities: profile.capabilities,
       models,
       statusNote,
