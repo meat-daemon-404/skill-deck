@@ -16,12 +16,15 @@ import {
 } from '@xyflow/react';
 import {
   Check,
+  CheckCircle2,
   Copy,
   Download,
+  FileCode2,
   Package,
   Play,
   Plus,
   RotateCcw,
+  ShieldAlert,
   Workflow,
 } from 'lucide-react';
 import type {
@@ -32,35 +35,63 @@ import type {
   SkillRecord,
   WorkflowGraph,
   WorkflowNodeInput,
+  WorkflowRunResult,
 } from '@skilldeck/core';
 import {
   compileWorkflowGraph,
   fetchDemoWorkflows,
   generateExportBundle,
+  runWorkflowGraphApi,
   type WorkspaceQuery,
 } from '../api.js';
+import { useI18n } from '../i18n.js';
 
 interface WorkflowExportViewProps {
   skills: SkillRecord[];
   mcpServers: McpServerRecord[];
   query: WorkspaceQuery;
   colorMode: 'light' | 'dark';
+  externalGraph?: WorkflowGraph | null;
 }
 
 interface CustomNodeData extends Record<string, unknown> {
   label: string;
   kind: WorkflowNodeInput['type'];
   description?: string;
+  runStatus?: 'ok' | 'blocked' | 'quarantined' | 'error';
 }
 
 function DeckFlowNode({ data }: NodeProps<Node<CustomNodeData>>) {
+  const statusBadge =
+    data.runStatus === 'ok'
+      ? 'badge-ok'
+      : data.runStatus === 'quarantined' || data.runStatus === 'blocked' || data.runStatus === 'error'
+        ? 'badge-danger'
+        : null;
+
   return (
-    <div className="workflow-node" data-kind={data.kind}>
+    <div
+      className="workflow-node"
+      data-kind={data.kind}
+      style={{
+        outline:
+          data.runStatus === 'ok'
+            ? '2px solid var(--ok)'
+            : data.runStatus === 'quarantined' || data.runStatus === 'blocked'
+              ? '2px solid var(--danger)'
+              : undefined,
+      }}
+    >
       <Handle type="target" position={Position.Left} />
       <div className="row-wrap" style={{ justifyContent: 'space-between', marginBlockEnd: '0.2rem' }}>
         <span className="badge badge-neutral" style={{ fontSize: '0.64rem' }}>
           {data.kind.toUpperCase()}
         </span>
+        {statusBadge && (
+          <span className={`badge ${statusBadge}`} style={{ fontSize: '0.62rem' }}>
+            {data.runStatus?.toUpperCase()}
+          </span>
+        )}
       </div>
       <div style={{ fontWeight: 650 }} className="truncate-line">
         {data.label}
@@ -102,11 +133,11 @@ function toReactFlowEdges(graph: WorkflowGraph): Edge[] {
 const FALLBACK_GRAPH: WorkflowGraph = {
   id: 'custom-agent-flow',
   name: 'Multi-Skill Delivery Pipeline',
-  description: 'Chains discovered skills and MCP servers with a verification gate.',
+  description: 'Chains discovered skills and MCP servers with an Agent-Immune verification gate.',
   nodes: [
     { id: 'n1', type: 'trigger', label: 'User Request', position: { x: 40, y: 140 } },
     { id: 'n2', type: 'skill', label: 'Primary Skill', position: { x: 300, y: 80 } },
-    { id: 'n3', type: 'gate', label: 'Human Review Gate', position: { x: 580, y: 140 } },
+    { id: 'n3', type: 'gate', label: 'Agent-Immune Gate', position: { x: 580, y: 140 } },
     { id: 'n4', type: 'output', label: 'Verified Output', position: { x: 860, y: 140 } },
   ],
   edges: [
@@ -121,18 +152,21 @@ export function WorkflowExportView({
   mcpServers,
   query,
   colorMode,
+  externalGraph,
 }: WorkflowExportViewProps) {
+  const { t } = useI18n();
   const [workflowName, setWorkflowName] = useState('Edge Feature Release Pipeline');
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<CustomNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [compiled, setCompiled] = useState<CompiledWorkflowResult | null>(null);
   const [compiling, setCompiling] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [runResult, setRunResult] = useState<WorkflowRunResult | null>(null);
   const [copiedSkill, setCopiedSkill] = useState(false);
 
   const [selectedSkillToAdd, setSelectedSkillToAdd] = useState('');
   const [selectedMcpToAdd, setSelectedMcpToAdd] = useState('');
 
-  // Cross-Platform Exporter state
   const [exportTarget, setExportTarget] = useState<ExportTarget>('claude-code');
   const [bundle, setBundle] = useState<ExportBundleResult | null>(null);
   const [selectedFileIndex, setSelectedFileIndex] = useState(0);
@@ -144,11 +178,19 @@ export function WorkflowExportView({
     setWorkflowName(graph.name);
     setNodes(toReactFlowNodes(graph));
     setEdges(toReactFlowEdges(graph));
+    setRunResult(null);
   }, [setEdges, setNodes]);
 
   useEffect(() => {
-    void loadStarterWorkflow();
-  }, [loadStarterWorkflow]);
+    if (externalGraph) {
+      setWorkflowName(externalGraph.name);
+      setNodes(toReactFlowNodes(externalGraph));
+      setEdges(toReactFlowEdges(externalGraph));
+      setRunResult(null);
+    } else {
+      void loadStarterWorkflow();
+    }
+  }, [externalGraph, loadStarterWorkflow, setEdges, setNodes]);
 
   useEffect(() => {
     if (skills[0] && !selectedSkillToAdd) {
@@ -181,30 +223,63 @@ export function WorkflowExportView({
     setNodes((prev) => [...prev, newNode]);
   }
 
+  function snapshotGraph(): WorkflowGraph {
+    return {
+      id: 'composer-workflow',
+      name: workflowName.trim() || 'SkillDeck Orchestrator',
+      description: `Visual workflow orchestrated by SkillDeck across ${nodes.length} stages.`,
+      nodes: nodes.map((n) => ({
+        id: n.id,
+        type: n.data.kind,
+        label: n.data.label,
+        description: n.data.description,
+        position: n.position,
+      })),
+      edges: edges.map((e) => ({
+        id: e.id,
+        source: e.source,
+        target: e.target,
+      })),
+    };
+  }
+
   async function handleCompile() {
     setCompiling(true);
     try {
-      const graph: WorkflowGraph = {
-        id: 'composer-workflow',
-        name: workflowName.trim() || 'SkillDeck Orchestrator',
-        description: `Visual workflow compiled by SkillDeck across ${nodes.length} stages.`,
-        nodes: nodes.map((n) => ({
-          id: n.id,
-          type: n.data.kind,
-          label: n.data.label,
-          description: n.data.description,
-          position: n.position,
-        })),
-        edges: edges.map((e) => ({
-          id: e.id,
-          source: e.source,
-          target: e.target,
-        })),
-      };
-      const result = await compileWorkflowGraph(graph);
+      const result = await compileWorkflowGraph(snapshotGraph());
       setCompiled(result);
     } finally {
       setCompiling(false);
+    }
+  }
+
+  async function handleRunWorkflow() {
+    setRunning(true);
+    try {
+      const result = await runWorkflowGraphApi({
+        graph: snapshotGraph(),
+        query,
+        runMode: 'dry-run',
+      });
+      setRunResult(result);
+      const statusMap = new Map(result.steps.map((s) => [s.nodeId, s.status]));
+      setNodes((prev) =>
+        prev.map((n) => {
+          const st = statusMap.get(n.id);
+          return {
+            ...n,
+            data: {
+              ...n.data,
+              runStatus:
+                st === 'ok' || st === 'blocked' || st === 'quarantined' || st === 'error'
+                  ? st
+                  : undefined,
+            },
+          };
+        }),
+      );
+    } finally {
+      setRunning(false);
     }
   }
 
@@ -237,7 +312,7 @@ export function WorkflowExportView({
       setCopiedSkill(true);
       setTimeout(() => setCopiedSkill(false), 1800);
     } catch {
-      // Ignore clipboard rejection in restricted environments
+      // Ignore clipboard failure
     }
   }
 
@@ -247,20 +322,23 @@ export function WorkflowExportView({
     <section className="stack-md" aria-labelledby="workflow-heading">
       <div>
         <h1 id="workflow-heading" style={{ fontSize: '1.35rem', fontWeight: 750, letterSpacing: '-0.02em' }}>
-          Workflow DAG Composer &amp; Cross-Platform Exporter
+          {t('可视化 DAG 工作流运行器 & 跨平台导出', 'Workflow DAG Live Runner & Cross-Platform Exporter')}
         </h1>
         <p className="card-subtitle">
-          Wire discovered Skills, MCP servers, and review gates into an executable Orchestrator <code>SKILL.md</code>, or export secret-safe configuration bundles across agent runtimes.
+          {t(
+            '拖拽连线编排真实发现的 Skills、MCP 服务、SuperAgent 节点与免疫闸门；支持直接点击运行（逐节点高亮状态）或编译成标准总控 SKILL.md。',
+            'Wire discovered Skills, MCP servers, Agent workers & immune gates; execute live with per-node status telemetry or compile into an Orchestrator SKILL.md.',
+          )}
         </p>
       </div>
 
       {/* Interactive React Flow DAG Composer */}
       <article className="card">
         <div className="card-header">
-          <div className="row-wrap" style={{ flex: '1 1 280px' }}>
+          <div className="row-wrap" style={{ flex: '1 1 260px' }}>
             <Workflow size={18} aria-hidden="true" />
             <label htmlFor="workflow-name-input" className="sr-only">
-              Workflow name
+              {t('工作流名称', 'Workflow name')}
             </label>
             <input
               id="workflow-name-input"
@@ -275,16 +353,25 @@ export function WorkflowExportView({
           <div className="row-wrap">
             <button type="button" className="btn btn-sm" onClick={() => void loadStarterWorkflow()}>
               <RotateCcw size={13} aria-hidden="true" />
-              Reset Template
+              {t('重置示例', 'Reset Template')}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm"
+              disabled={compiling || nodes.length === 0}
+              onClick={() => void handleCompile()}
+            >
+              <FileCode2 size={13} aria-hidden="true" />
+              {compiling ? t('编译中...', 'Compiling...') : t('编译为 SKILL.md', 'Compile SKILL.md')}
             </button>
             <button
               type="button"
               className="btn btn-primary btn-sm"
-              disabled={compiling || nodes.length === 0}
-              onClick={() => void handleCompile()}
+              disabled={running || nodes.length === 0}
+              onClick={() => void handleRunWorkflow()}
             >
               <Play size={13} aria-hidden="true" />
-              {compiling ? 'Compiling...' : 'Compile to SKILL.md'}
+              {running ? t('运行中...', 'Running...') : t('运行工作流', 'Run Workflow')}
             </button>
           </div>
         </div>
@@ -292,7 +379,7 @@ export function WorkflowExportView({
         {/* Palette Bar */}
         <div className="row-wrap">
           <div className="row-wrap">
-            <label htmlFor="add-skill-select" className="sr-only">Choose a skill to add</label>
+            <label htmlFor="add-skill-select" className="sr-only">{t('选择技能节点', 'Choose skill')}</label>
             <select
               id="add-skill-select"
               className="select"
@@ -309,15 +396,15 @@ export function WorkflowExportView({
               type="button"
               className="btn btn-sm"
               disabled={!selectedSkillToAdd}
-              onClick={() => addCanvasNode('skill', selectedSkillToAdd, 'Run skill instructions')}
+              onClick={() => addCanvasNode('skill', selectedSkillToAdd, t('执行技能规范', 'Run skill instructions'))}
             >
-              <Plus size={13} aria-hidden="true" /> Add Skill
+              <Plus size={13} aria-hidden="true" /> {t('添加技能', 'Add Skill')}
             </button>
           </div>
 
           {mcpServers.length > 0 && (
             <div className="row-wrap">
-              <label htmlFor="add-mcp-select" className="sr-only">Choose an MCP server to add</label>
+              <label htmlFor="add-mcp-select" className="sr-only">{t('选择 MCP 节点', 'Choose MCP')}</label>
               <select
                 id="add-mcp-select"
                 className="select"
@@ -334,9 +421,9 @@ export function WorkflowExportView({
                 type="button"
                 className="btn btn-sm"
                 disabled={!selectedMcpToAdd}
-                onClick={() => addCanvasNode('mcp', selectedMcpToAdd, 'Invoke MCP tool')}
+                onClick={() => addCanvasNode('mcp', selectedMcpToAdd, t('经由 Hub 调用 MCP', 'Invoke MCP via Hub'))}
               >
-                <Plus size={13} aria-hidden="true" /> Add MCP
+                <Plus size={13} aria-hidden="true" /> {t('添加 MCP', 'Add MCP')}
               </button>
             </div>
           )}
@@ -344,13 +431,13 @@ export function WorkflowExportView({
           <button
             type="button"
             className="btn btn-sm"
-            onClick={() => addCanvasNode('gate', 'Approval Gate', 'Confirm before proceeding')}
+            onClick={() => addCanvasNode('gate', 'Agent-Immune Gate', t('免疫校验与人工审批', 'Immune check & approval'))}
           >
-            <Plus size={13} aria-hidden="true" /> Add Gate
+            <Plus size={13} aria-hidden="true" /> {t('添加免疫闸门', 'Add Immune Gate')}
           </button>
         </div>
 
-        <div className="flow-canvas-shell" aria-label="Interactive workflow canvas">
+        <div className="flow-canvas-shell" aria-label={t('交互式工作流画布', 'Interactive workflow canvas')}>
           <ReactFlow
             nodes={nodes}
             edges={edges}
@@ -367,19 +454,66 @@ export function WorkflowExportView({
           </ReactFlow>
         </div>
 
+        {/* Live Run Execution Trace */}
+        {runResult && (
+          <div className="stack-sm">
+            <div className="row-wrap" style={{ justifyContent: 'space-between' }}>
+              <div className="row-wrap">
+                {runResult.status === 'completed' ? (
+                  <CheckCircle2 size={16} aria-hidden="true" style={{ color: 'var(--ok)' }} />
+                ) : (
+                  <ShieldAlert size={16} aria-hidden="true" style={{ color: 'var(--danger)' }} />
+                )}
+                <strong>
+                  {t(`工作流执行完成 (${runResult.status.toUpperCase()})`, `Workflow Run (${runResult.status.toUpperCase()})`)}
+                </strong>
+                <span className="badge badge-neutral">{runResult.steps.length} steps · {runResult.totalDurationMs}ms</span>
+              </div>
+            </div>
+            <div className="stack-sm">
+              {runResult.steps.map((st) => (
+                <div
+                  key={`${st.nodeId}-${st.step}`}
+                  style={{
+                    padding: '0.55rem 0.8rem',
+                    borderRadius: 'var(--radius-sm)',
+                    border: `1px solid ${st.status === 'ok' ? 'var(--border)' : 'var(--danger)'}`,
+                    background: 'var(--bg-elevated)',
+                    fontSize: '0.79rem',
+                  }}
+                >
+                  <div className="row-wrap" style={{ justifyContent: 'space-between' }}>
+                    <div className="row-wrap">
+                      <span className={`badge ${st.status === 'ok' ? 'badge-ok' : 'badge-danger'}`}>
+                        {st.status.toUpperCase()}
+                      </span>
+                      <strong>{st.step}. {st.label}</strong>
+                      <span className="badge badge-neutral">{st.engineUsed}</span>
+                    </div>
+                    <span className="mono muted">{st.durationMs}ms</span>
+                  </div>
+                  <p className="muted" style={{ marginBlockStart: '0.25rem', whiteSpace: 'pre-wrap' }}>
+                    {st.output}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {compiled && (
           <div className="stack-sm">
             <div className="card-header">
               <div className="row-wrap">
                 <strong style={{ fontSize: '0.9rem' }}>
-                  Compiled Orchestrator: <code>{compiled.slug}/SKILL.md</code>
+                  {t('已编译总控技能：', 'Compiled Orchestrator: ')}<code>{compiled.slug}/SKILL.md</code>
                 </strong>
                 <span className="badge badge-accent">~{compiled.estimatedTokens}t</span>
-                {compiled.hasCycle && <span className="badge badge-warn">Cycle detected</span>}
+                {compiled.hasCycle && <span className="badge badge-warn">{t('检测到环路', 'Cycle detected')}</span>}
               </div>
               <button type="button" className="btn btn-sm" onClick={() => void handleCopyCompiled()}>
                 {copiedSkill ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
-                {copiedSkill ? 'Copied' : 'Copy SKILL.md'}
+                {copiedSkill ? t('已复制', 'Copied') : t('复制 SKILL.md', 'Copy SKILL.md')}
               </button>
             </div>
             <pre
@@ -400,14 +534,17 @@ export function WorkflowExportView({
           <div>
             <h2 className="card-title">
               <Package size={17} aria-hidden="true" />
-              Cross-Platform Bundle Exporter (Secret-Safe)
+              {t('跨平台脱敏配置导出器', 'Cross-Platform Bundle Exporter (Secret-Safe)')}
             </h2>
             <p className="card-subtitle">
-              Convert your workspace into target layouts for Claude Code, Cursor, Gemini CLI, Antigravity, or Portable JSON. Hardcoded secrets are automatically replaced with <code>${'{ENV_VAR}'}</code> placeholders.
+              {t(
+                '一键把当前工作区转换为 Claude Code、Cursor (.mdc)、Gemini CLI、Antigravity 插件或 Portable JSON，所有明文密钥自动替换为 ${ENV_VAR}。',
+                'Convert workspace into Claude Code, Cursor (.mdc), Gemini CLI, Antigravity Plugin, or Portable JSON with all literal secrets replaced by ${ENV_VAR}.',
+              )}
             </p>
           </div>
           <div className="row-wrap">
-            <label htmlFor="export-target-select" className="sr-only">Target agent platform</label>
+            <label htmlFor="export-target-select" className="sr-only">{t('导出目标平台', 'Target platform')}</label>
             <select
               id="export-target-select"
               className="select"
@@ -430,12 +567,12 @@ export function WorkflowExportView({
               disabled={exporting}
               onClick={() => void handleGenerateExport()}
             >
-              {exporting ? 'Generating...' : 'Preview Export'}
+              {exporting ? t('生成中...', 'Generating...') : t('预览导出包', 'Preview Export')}
             </button>
             {bundle && (
               <button type="button" className="btn btn-sm" onClick={handleDownloadBundleJson}>
                 <Download size={13} aria-hidden="true" />
-                Download Bundle JSON
+                {t('下载 JSON', 'Download Bundle')}
               </button>
             )}
           </div>
@@ -444,10 +581,10 @@ export function WorkflowExportView({
         {bundle && (
           <div className="stack-sm">
             <div className="row-wrap">
-              <span className="badge badge-accent">{bundle.files.length} files generated</span>
+              <span className="badge badge-accent">{bundle.files.length} {t('个文件', 'files')}</span>
               <span className="badge badge-neutral">{bundle.skillCount} skills · {bundle.mcpCount} MCP</span>
               <span className="badge badge-ok">
-                {bundle.redactedSecretCount} secret(s) stripped to safe env refs
+                {t(`已自动脱敏 ${bundle.redactedSecretCount} 个密钥`, `${bundle.redactedSecretCount} secret(s) stripped`)}
               </span>
             </div>
 

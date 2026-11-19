@@ -4,11 +4,17 @@ export type AgentPlatform =
   | 'cursor'
   | 'gemini-cli'
   | 'codex'
+  | 'dsh'
+  | 'zcode'
   | 'custom';
 
 export type LintSeverity = 'error' | 'warning' | 'info';
 
 export type ConflictSeverity = 'high' | 'medium' | 'low';
+
+export type ImmuneVerdict = 'safe' | 'caution' | 'quarantine';
+
+export type ImmuneSeverity = 'critical' | 'high' | 'medium' | 'low';
 
 export type ExportTarget =
   | 'claude-code'
@@ -58,6 +64,7 @@ export interface SkillRecord {
   filePath: string;
   relativePath: string;
   kind: 'skill' | 'rule';
+  disabled?: boolean;
   frontmatter: SkillFrontmatter;
   frontmatterRaw: string;
   frontmatterValid: boolean;
@@ -121,6 +128,128 @@ export interface ConflictPair {
   suggestion: string;
 }
 
+export interface ImmuneFinding {
+  id: string;
+  ruleId: string;
+  severity: ImmuneSeverity;
+  vector:
+    | 'prompt-injection'
+    | 'exfiltration'
+    | 'destructive-exec'
+    | 'tool-poisoning'
+    | 'unicode-smuggling'
+    | 'privilege-escalation'
+    | 'custom-antibody';
+  targetId: string;
+  targetName: string;
+  filePath: string;
+  title: string;
+  evidence: string;
+  recommendation: string;
+}
+
+export interface ImmuneSkillReport {
+  skillId: string;
+  skillName: string;
+  platform: AgentPlatform;
+  verdict: ImmuneVerdict;
+  threatScore: number;
+  findings: ImmuneFinding[];
+}
+
+export interface ImmuneAntibody {
+  id: string;
+  name: string;
+  vector: ImmuneFinding['vector'];
+  severity: ImmuneSeverity;
+  pattern: string;
+  flags?: string;
+  description: string;
+  source: 'builtin' | 'learned';
+  createdAt: string;
+  hits: number;
+}
+
+export interface PitfallAntibody {
+  id: string;
+  numericId?: number;
+  trigger_pattern: string;
+  symptom: string;
+  prescription: string;
+  status: 'active' | 'retired' | 'quarantined';
+  quality_grade: 'advice' | 'tactic' | 'quarantined';
+  rubric_score: number;
+  root_cause: string;
+  hit_count: number;
+  fail_count: number;
+  tool_name: string | null;
+  project_scope: string;
+  sourceDb: string;
+  created_at: number;
+}
+
+export interface AgentImmuneBridgeReport {
+  detectedStores: Array<{
+    path: string;
+    kind: 'sqlite' | 'jsonl';
+    exists: boolean;
+    antibodyCount: number;
+    error?: string;
+  }>;
+  pitfallAntibodies: PitfallAntibody[];
+  activePitfallCount: number;
+  totalHits: number;
+}
+
+export interface ImmuneWorkspaceReport {
+  immunityScore: number;
+  safeCount: number;
+  cautionCount: number;
+  quarantineCount: number;
+  totalFindings: number;
+  skillReports: ImmuneSkillReport[];
+  findings: ImmuneFinding[];
+  activeAntibodies: ImmuneAntibody[];
+  agentImmuneBridge: AgentImmuneBridgeReport;
+}
+
+export interface ImmuneFirewallDecision {
+  allowed: boolean;
+  action: 'allow' | 'quarantine' | 'block';
+  reason: string;
+  matchedRules: string[];
+  threatScore: number;
+  loopDetected: boolean;
+}
+
+export interface QuarantineItem {
+  id: string;
+  createdAt: string;
+  source: 'hub' | 'superagent' | 'workflow';
+  serverName: string;
+  toolName: string;
+  redactedArgs: unknown;
+  reason: string;
+  matchedRules: string[];
+  threatScore: number;
+  status: 'pending' | 'approved' | 'rejected' | 'immunized';
+  resolvedAt?: string;
+}
+
+export interface HubTraceEvent {
+  id: string;
+  timestamp: string;
+  source: 'mcp-stdio' | 'hub-api' | 'superagent' | 'workflow';
+  serverName: string;
+  toolName: string;
+  durationMs: number;
+  status: 'ok' | 'blocked' | 'quarantined' | 'error' | 'dry-run';
+  immuneAction: ImmuneFirewallDecision['action'];
+  summary: string;
+  redactedArgsPreview?: string;
+  resultPreview?: string;
+}
+
 export interface RouteMatch {
   skillId: string;
   skillName: string;
@@ -181,6 +310,7 @@ export interface ScanSourceInfo {
 
 export interface WorkspaceSummary {
   healthScore: number;
+  immunityScore: number;
   skillCount: number;
   mcpServerCount: number;
   activeMcpCount: number;
@@ -189,6 +319,7 @@ export interface WorkspaceSummary {
   infoCount: number;
   highConflictCount: number;
   secretFindingCount: number;
+  quarantineSkillCount: number;
 }
 
 export interface WorkspaceReport {
@@ -201,14 +332,18 @@ export interface WorkspaceReport {
   mcpServers: McpServerRecord[];
   conflicts: ConflictPair[];
   issues: LintIssue[];
+  immune: ImmuneWorkspaceReport;
 }
 
 export interface WorkflowNodeInput {
   id: string;
-  type: 'trigger' | 'skill' | 'mcp' | 'gate' | 'output';
+  type: 'trigger' | 'skill' | 'mcp' | 'agent' | 'gate' | 'output';
   label: string;
   refId?: string;
   description?: string;
+  toolName?: string;
+  toolArgs?: Record<string, unknown>;
+  agentEngine?: string;
   position?: { x: number; y: number };
 }
 
@@ -242,6 +377,112 @@ export interface CompiledWorkflowResult {
   orchestratorSkillMd: string;
 }
 
+export interface WorkflowStepExecution {
+  step: number;
+  nodeId: string;
+  type: WorkflowNodeInput['type'];
+  label: string;
+  status: 'ok' | 'blocked' | 'quarantined' | 'skipped' | 'error';
+  durationMs: number;
+  immuneVerdict: ImmuneFirewallDecision['action'];
+  output: string;
+  engineUsed: string;
+}
+
+export interface WorkflowRunResult {
+  runId: string;
+  workflowName: string;
+  mode: 'dry-run' | 'live';
+  startedAt: string;
+  finishedAt: string;
+  totalDurationMs: number;
+  status: 'completed' | 'blocked' | 'failed';
+  steps: WorkflowStepExecution[];
+  finalSummary: string;
+}
+
+export interface DetectedLocalAgent {
+  id: string;
+  name: string;
+  command: string;
+  available: boolean;
+  resolvedPath?: string;
+  capabilities: string[];
+  models?: string[];
+  statusNote: string;
+}
+
+export interface SuperAgentStep {
+  id: string;
+  order: number;
+  title: string;
+  role: 'planner' | 'skill-worker' | 'mcp-worker' | 'cli-agent' | 'immune-gate' | 'synthesizer';
+  engine: string;
+  skillNames: string[];
+  mcpServer?: string;
+  instruction: string;
+  estimatedTokens: number;
+  immuneStatus: ImmuneVerdict;
+}
+
+export interface SuperAgentPlan {
+  planId: string;
+  goal: string;
+  plannerEngine: string;
+  createdAt: string;
+  selectedSkills: Array<{
+    name: string;
+    platform: AgentPlatform;
+    score: number;
+    immuneVerdict: ImmuneVerdict;
+  }>;
+  skippedQuarantinedSkills: string[];
+  selectedMcps: string[];
+  estimatedTotalTokens: number;
+  steps: SuperAgentStep[];
+  workflowGraph: WorkflowGraph;
+}
+
+export interface VaultSkillEntry {
+  slug: string;
+  name: string;
+  vaultPath: string;
+  description: string;
+  importedFrom?: string;
+  importedAt: string;
+  contentHash: string;
+}
+
+export interface VaultTransactionOp {
+  kind: 'copy' | 'rename' | 'write';
+  sourcePath?: string;
+  targetPath: string;
+  backupPath?: string;
+  existedBefore: boolean;
+}
+
+export interface VaultTransaction {
+  id: string;
+  timestamp: string;
+  action: 'import' | 'sync' | 'disable' | 'enable' | 'quarantine' | 'rollback';
+  summary: string;
+  rolledBack: boolean;
+  operations: VaultTransactionOp[];
+}
+
+export interface VaultSyncPreviewItem {
+  skillName: string;
+  slug: string;
+  targetPath: string;
+  change: 'create' | 'update' | 'unchanged';
+}
+
+export interface VaultStatus {
+  vaultRoot: string;
+  skills: VaultSkillEntry[];
+  transactions: VaultTransaction[];
+}
+
 export interface ExportedFile {
   relativePath: string;
   content: string;
@@ -262,4 +503,5 @@ export interface ScanOptions {
   includeBuiltin?: boolean;
   conflictThreshold?: number;
   startupBudgetLimit?: number;
+  customAntibodies?: ImmuneAntibody[];
 }

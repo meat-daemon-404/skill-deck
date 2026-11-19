@@ -1,5 +1,6 @@
 import { GitCompareArrows, ShieldCheck } from 'lucide-react';
 import type { ConflictPair, SkillRecord } from '@skilldeck/core';
+import { useI18n } from '../i18n.js';
 
 interface ConflictsViewProps {
   conflicts: ConflictPair[];
@@ -8,6 +9,7 @@ interface ConflictsViewProps {
 }
 
 export function ConflictsView({ conflicts, skills, onInspectSkill }: ConflictsViewProps) {
+  const { t } = useI18n();
   const skillMap = new Map(skills.map((s) => [s.id, s]));
 
   return (
@@ -15,26 +17,31 @@ export function ConflictsView({ conflicts, skills, onInspectSkill }: ConflictsVi
       <div className="card-header">
         <div>
           <h1 id="conflicts-heading" style={{ fontSize: '1.35rem', fontWeight: 750, letterSpacing: '-0.02em' }}>
-            Trigger Conflict Radar
+            {t('中英双语触发冲突雷达', 'Trigger Conflict Radar')}
           </h1>
           <p className="card-subtitle">
-            Bilingual TF-IDF + trigger-phrase overlap detector identifying skills that compete for the same user prompts.
+            {t(
+              '基于双语 TF-IDF 与显式触发词交叉匹配，揪出在相似场景下互相抢触发的技能对。',
+              'Bilingual TF-IDF + trigger-phrase overlap detector identifying skills competing for the same prompts.',
+            )}
           </p>
         </div>
-        <span className="badge badge-neutral">{conflicts.length} colliding pairs</span>
+        <span className="badge badge-neutral">
+          {t(`${conflicts.length} 对冲突`, `${conflicts.length} colliding pairs`)}
+        </span>
       </div>
 
       {conflicts.length === 0 ? (
         <article className="card" style={{ alignItems: 'center', padding: '2.5rem', textAlign: 'center' }}>
           <ShieldCheck size={36} aria-hidden="true" style={{ color: 'var(--ok)' }} />
-          <h2 style={{ fontSize: '1.05rem', fontWeight: 650 }}>Clean Routing Boundaries</h2>
+          <h2 style={{ fontSize: '1.05rem', fontWeight: 650 }}>{t('路由边界清晰无冲突', 'Clean Routing Boundaries')}</h2>
           <p className="muted" style={{ maxInlineSize: '460px' }}>
-            No overlapping trigger phrases or high-similarity skill descriptions were detected across this workspace.
+            {t('未检测到高相似度或重复触发词冲突。', 'No overlapping trigger phrases or high-similarity collisions detected.')}
           </p>
         </article>
       ) : (
         <div className="stack-md">
-          {conflicts.map((pair) => {
+          {conflicts.slice(0, 40).map((pair) => {
             const skillA = skillMap.get(pair.skillA.id);
             const skillB = skillMap.get(pair.skillB.id);
             const pct = Math.round(pair.similarity * 100);
@@ -74,7 +81,7 @@ export function ConflictsView({ conflicts, skills, onInspectSkill }: ConflictsVi
                 <div className="row-wrap">
                   {pair.sharedPhrases.map((phrase) => (
                     <span key={`p-${phrase}`} className="badge badge-danger">
-                      exact trigger: &ldquo;{phrase}&rdquo;
+                      {t('重合触发词', 'exact trigger')}: &ldquo;{phrase}&rdquo;
                     </span>
                   ))}
                   {pair.sharedKeywords.map((kw) => (
@@ -119,7 +126,8 @@ export function ConflictsView({ conflicts, skills, onInspectSkill }: ConflictsVi
                 </div>
 
                 <p style={{ fontSize: '0.83rem' }}>
-                  <strong>Recommendation:</strong> {pair.suggestion}
+                  <strong>{t('优化建议：', 'Recommendation: ')}</strong>
+                  {pair.suggestion}
                 </p>
               </article>
             );

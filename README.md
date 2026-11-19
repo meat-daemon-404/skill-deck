@@ -1,76 +1,59 @@
-# SkillDeck
+# SkillDeck v0.2
 
-**Local-first Control Tower for AI Agent Skills (`SKILL.md`), MCP Servers (`mcpServers`), Context Token Budgets, Trigger Conflict Detection, and Visual Workflow Composition.**
+**Local-first SuperAgent Control Tower, MCP Aggregation Gateway, Dual-Layer Agent-Immune Shield (natively integrated with [`meat-daemon-404/agent-immune`](https://github.com/meat-daemon-404/agent-immune)), and Transactional Skill Vault — with full Bilingual UI (简体中文 / English).**
 
 [English](./README.md) | [简体中文](./README.zh-CN.md)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-0284c7.svg)](./LICENSE)
 [![Node.js >= 20](https://img.shields.io/badge/Node.js-%3E%3D20-047857.svg)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6.svg)](https://www.typescriptlang.org)
-[![Local-First](https://img.shields.io/badge/Privacy-100%25%20Local--First-6d28d9.svg)](#privacy--security)
+[![agent-immune native](https://img.shields.io/badge/agent--immune-SQLite%20%2B%20JSONL%20Native-10b981.svg)](https://github.com/meat-daemon-404/agent-immune)
 
 ---
 
-## Why SkillDeck?
+## What's New in v0.2
 
-Modern coding agents (**Antigravity**, **Claude Code**, **Cursor**, **Gemini CLI**, **OpenAI Codex**) all converge on the open **Agent Skills (`SKILL.md`)** and **Model Context Protocol (`mcpServers`)** ecosystem. Once you install dozens of skills and MCP servers across tools, four invisible problems show up fast:
-
-1. **Silent Context Budget Bloat** — Oversized `description` frontmatter and unused MCP server schemas quietly burn thousands of always-on tokens on every single turn.
-2. **Trigger Collisions** — Two skills competing on the same keywords or phrases cause unpredictable routing.
-3. **Hardcoded Secret Leaks & Spec Drift** — Plaintext API keys inside `.mcp.json`, broken local reference links, mismatched folder names, and missing CLI binaries on `PATH`.
-4. **Platform Fragmentation** — Copying and converting skills/MCP configs across Claude Code, Cursor, Gemini CLI, and Antigravity by hand.
-
-**SkillDeck** gives you a single, 100% local, zero-telemetry CLI + interactive Web Control Tower to see, test, lint, compose, and export your entire AI agent stack.
-
----
-
-## Key Features
-
-- **Multi-Platform Read-Only Discovery**: Automatically scans `.gemini/`, `.claude/`, `.cursor/`, `.codex/`, and custom directories (plus a bundled bilingual **Demo Workspace** so you can explore immediately).
-- **Startup vs. On-Demand Context Token Heatmap**: Calibrated bilingual (English + CJK) token estimator separating always-on startup catalog cost from deferred body/resource tokens.
-- **Bilingual Trigger Conflict Radar**: TF-IDF cosine similarity + explicit trigger-phrase collision detection across both English and Chinese skill descriptions.
-- **Interactive Prompt Routing Sandbox**: Test any prompt live, inspect matched trigger spans, verify negative-boundary suppression (`Do NOT use for...` / `不负责...`), and catch ambiguous routing collisions before they happen.
-- **14-Rule Spec Linter & Secret Shield (`SD001`–`SD104`)**: Validates `SKILL.md` compliance, flags broken links and missing MCP binaries, and automatically masks hardcoded credentials before rendering or exporting.
-- **Visual Workflow DAG Composer**: Built with [`@xyflow/react`](https://reactflow.dev/), allowing you to wire Skills, MCP Servers, and Review Gates into an executable, topologically sorted **Orchestrator `SKILL.md`**.
-- **Secret-Safe Cross-Platform Exporter**: Convert curated skills & redacted MCP configs between **Claude Code**, **Cursor (`.mdc`)**, **Gemini CLI**, **Antigravity Plugin**, and **Portable JSON**.
+1. **SuperAgent Command Center & Live DAG Runner** — Auto-detects local CLI agents (`agy` Antigravity CLI, `ollama` + live local models, `claude`, `gemini`, `codex`, `gh`), routes across all 7 Agent platforms (`Antigravity`, `Claude Code`, `Cursor`, `Gemini CLI`, `Codex`, `DSH`, `ZCode`), injects `<immune_memory>` pitfall antibodies, and runs visual React Flow DAGs step-by-step with live per-node status telemetry.
+2. **Native [`meat-daemon-404/agent-immune`](https://github.com/meat-daemon-404/agent-immune) Integration (Dual-Layer Immunity)**:
+   - **Layer 1 — Self-Evolving Pitfall Memory (`trigger → avoid → do`)**: Zero-dependency `node:sqlite` read-only bridge for `~/.dsh/immune.sqlite`, `~/.zcode/immune.sqlite`, `~/.agent-immune/immune.sqlite`, and Git-native `.immune/rules.jsonl` team sync, with delimiter-isolated `<immune_memory>` injection and live pitfall distillation.
+   - **Layer 2 — ToxicSkills Security Shield & Runtime Firewall**: Scans every `SKILL.md` and `scripts/` for prompt injection (`IMM001`), credential exfiltration (`IMM002`), destructive pipes (`IMM003`), covert tool poisoning (`IMM004`), and Unicode smuggling (`IMM005`); enforces a runaway loop circuit breaker and Human-in-the-Loop Quarantine Queue (`Approve` / `Reject` / `Immunize`).
+3. **`@skilldeck/hub` — Real Local MCP Aggregation Gateway (`skilldeck hub`)** — A genuine stdio JSON-RPC 2.0 MCP Meta-Server exposing 7 progressive-disclosure meta-tools (`~580` tokens vs. `20,000+` direct tokens), downstream MCP `tools/list` probes, and a real-time SSE telemetry stream.
+4. **Skill Vault & Transactional Sync** — Single-source-of-truth Vault (`~/.skilldeck/vault/`), Dry-Run Sync preview, safe skill Quarantine/Disable, and 1-click Transaction Rollback.
+5. **Bilingual Web UI (简体中文 Default + 1-Click EN Switch)** — Full Chinese & English interface with modern light/dark mode.
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Install dependencies
 pnpm install
-
-# 2. Build core, server, CLI, and Web Control Tower
 pnpm build
-
-# 3. Launch the interactive Control Tower with the bundled demo workspace
 pnpm demo
-# -> Open http://127.0.0.1:4173 (switch to "My Machine (Read-Only)" in the top bar anytime!)
+# Open http://127.0.0.1:4173 — switch to "扫描本机（只读） / My Machine" anytime!
+```
+
+### Connect Every Agent to `@skilldeck/hub` (1 Entry, ~95% Startup Token Savings)
+
+```json
+{
+  "mcpServers": {
+    "skilldeck-hub": {
+      "command": "node",
+      "args": ["<path-to-skill-deck>/packages/cli/dist/cli.js", "hub", "--local"]
+    }
+  }
+}
 ```
 
 ### CLI Commands
 
 ```bash
-# Scan bundled demo workspace or your real local agent directories
-node packages/cli/dist/cli.js scan --demo
-node packages/cli/dist/cli.js scan --local
-
-# CI-ready spec & security linter (exits non-zero on errors; add --strict to fail on warnings)
-node packages/cli/dist/cli.js lint --demo
-node packages/cli/dist/cli.js lint --local --json
-
-# Context budget breakdown & bilingual trigger conflict radar
-node packages/cli/dist/cli.js budget --demo
-node packages/cli/dist/cli.js conflicts --demo
-
-# Simulate prompt-to-skill routing in the terminal
-node packages/cli/dist/cli.js route --demo "Deploy a Cloudflare Worker with wrangler.toml"
-node packages/cli/dist/cli.js route --demo "帮我拆分镜，生成分镜表和首帧提示词"
-
-# Export a sanitized cross-platform bundle (all detected secrets replaced with ${ENV_VAR})
-node packages/cli/dist/cli.js export --demo --target cursor --out .skilldeck-export/cursor
+node packages/cli/dist/cli.js scan --local       # Scan Antigravity, Claude, Cursor, Codex, DSH & ZCode
+node packages/cli/dist/cli.js immune --demo      # Dual-layer ToxicSkills + agent-immune pitfall report
+node packages/cli/dist/cli.js agents             # Detect local CLI agents & running Ollama models
+node packages/cli/dist/cli.js run --demo "Deploy Cloudflare Worker with wrangler.toml"
+node packages/cli/dist/cli.js hub --local        # Start real stdio JSON-RPC 2.0 MCP Meta-Server
+node packages/cli/dist/cli.js serve --demo       # Launch bilingual Web Control Tower
 ```
 
 ---
@@ -80,39 +63,15 @@ node packages/cli/dist/cli.js export --demo --target cursor --out .skilldeck-exp
 ```text
 skill-deck/
 ├── packages/
-│   ├── core/          # @skilldeck/core — Zero-UI engine (scanner, parser, tokens, conflicts, router, linter, redactor, exporter)
-│   ├── server/        # @skilldeck/server — Localhost-only Node HTTP API & static Web UI host
-│   └── cli/           # @skilldeck/cli — Terminal CLI (`scan`, `lint`, `budget`, `conflicts`, `route`, `export`, `serve`)
+│   ├── core/          # @skilldeck/core — Scanner (7 platforms), agent-immune SQLite/JSONL bridge, ToxicSkills shield, Vault & Rollback, SuperAgent planner & DAG runner
+│   ├── hub/           # @skilldeck/hub — Real stdio MCP Meta-Server, downstream JSON-RPC client, runtime firewall & SSE traces
+│   ├── server/        # @skilldeck/server — Localhost-only HTTP/SSE API & static Web UI host
+│   └── cli/           # @skilldeck/cli — `scan`, `lint`, `immune`, `budget`, `conflicts`, `route`, `agents`, `run`, `hub`, `export`, `serve`
 ├── apps/
-│   └── web/           # @skilldeck/web — React 19 + TypeScript + Vite + React Flow Control Tower UI
-├── examples/
-│   └── demo-workspace/ # Realistic multi-platform English + Chinese fixture workspace
-└── docs/
-    ├── architecture.md
-    └── spec-checks.md
+│   └── web/           # @skilldeck/web — Bilingual (ZH/EN) React 19 + React Flow Control Tower UI
+└── examples/
+    └── demo-workspace/ # Realistic demo with EN/ZH skills, .immune/rules.jsonl, toxic demo skill & MCP configs
 ```
-
-See [docs/architecture.md](./docs/architecture.md) and [docs/spec-checks.md](./docs/spec-checks.md) for detailed design notes and the full lint rule catalog.
-
----
-
-## Privacy & Security
-
-- **100% Local-First**: SkillDeck runs strictly on `127.0.0.1` and makes zero outbound telemetry requests.
-- **Read-Only Discovery**: Scanning your machine never modifies existing `.gemini`, `.claude`, `.cursor`, or `.codex` files.
-- **Automatic Credential Redaction**: Detected API keys, tokens, and database passwords inside MCP configs are masked inside `@skilldeck/core` before reaching the HTTP API, browser UI, or exported bundles.
-
-## Development & Testing
-
-```bash
-pnpm typecheck   # Strict TypeScript checks across all packages & web app
-pnpm test        # Run Vitest unit & REST API integration suite
-pnpm build       # Production build for all packages + Web UI
-```
-
-## Contributing
-
-Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a pull request.
 
 ## License
 

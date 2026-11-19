@@ -89,6 +89,8 @@ export function getDefaultLocalScanRoots(includeBuiltin = false): ScanRootSpec[]
     { rootPath: path.join(home, '.cursor', 'skills'), platform: 'cursor' },
     { rootPath: path.join(home, '.cursor', 'mcp.json'), platform: 'cursor' },
     { rootPath: path.join(home, '.codex', 'skills'), platform: 'codex' },
+    { rootPath: path.join(home, '.dsh', 'skills'), platform: 'dsh' },
+    { rootPath: path.join(home, '.zcode', 'skills'), platform: 'zcode' },
   ];
 
   if (includeBuiltin) {
@@ -117,6 +119,12 @@ export function inferPlatformFromPath(targetPath: string, fallback: AgentPlatfor
   }
   if (normalized.includes('/.codex/')) {
     return 'codex';
+  }
+  if (normalized.includes('/.dsh/')) {
+    return 'dsh';
+  }
+  if (normalized.includes('/.zcode/')) {
+    return 'zcode';
   }
   return fallback;
 }

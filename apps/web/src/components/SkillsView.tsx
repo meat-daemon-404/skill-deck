@@ -6,24 +6,35 @@ import {
   FileText,
   FolderTree,
   Search,
+  ShieldAlert,
   X,
 } from 'lucide-react';
-import type { AgentPlatform, LintIssue, SkillRecord } from '@skilldeck/core';
+import type { AgentPlatform, ImmuneSkillReport, LintIssue, SkillRecord } from '@skilldeck/core';
+import type { WorkspaceQuery } from '../api.js';
+import { useI18n } from '../i18n.js';
+import { VaultPanel } from './VaultPanel.js';
 
 interface SkillsViewProps {
   skills: SkillRecord[];
   issues: LintIssue[];
+  immuneReports: ImmuneSkillReport[];
   inspectedSkill: SkillRecord | null;
   onInspectSkill: (skill: SkillRecord | null) => void;
+  query: WorkspaceQuery;
+  onRefreshWorkspace: () => void;
 }
 
 export function SkillsView({
   skills,
   issues,
+  immuneReports,
   inspectedSkill,
   onInspectSkill,
+  query,
+  onRefreshWorkspace,
 }: SkillsViewProps) {
-  const [query, setQuery] = useState('');
+  const { t } = useI18n();
+  const [searchText, setSearchText] = useState('');
   const [platformFilter, setPlatformFilter] = useState<'all' | AgentPlatform>('all');
   const [sortBy, setSortBy] = useState<'startup' | 'body' | 'name'>('startup');
   const dialogRef = useRef<HTMLDialogElement | null>(null);
@@ -37,6 +48,11 @@ export function SkillsView({
       dialog.close();
     }
   }, [inspectedSkill]);
+
+  const immuneMap = useMemo(
+    () => new Map(immuneReports.map((r) => [r.skillId, r])),
+    [immuneReports],
+  );
 
   const issueCountBySkill = useMemo(() => {
     const map = new Map<string, { errors: number; warnings: number; all: LintIssue[] }>();
@@ -56,7 +72,7 @@ export function SkillsView({
   }, [skills]);
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
+    const q = searchText.trim().toLowerCase();
     return skills
       .filter((s) => {
         if (platformFilter !== 'all' && s.platform !== platformFilter) return false;
@@ -72,7 +88,7 @@ export function SkillsView({
         if (sortBy === 'body') return b.tokens.bodyTokens - a.tokens.bodyTokens;
         return a.name.localeCompare(b.name);
       });
-  }, [skills, query, platformFilter, sortBy]);
+  }, [skills, searchText, platformFilter, sortBy]);
 
   const inspectedIssues = inspectedSkill
     ? (issueCountBySkill.get(inspectedSkill.id)?.all ?? [])
@@ -83,20 +99,28 @@ export function SkillsView({
       <div className="card-header">
         <div>
           <h1 id="skills-heading" style={{ fontSize: '1.35rem', fontWeight: 750, letterSpacing: '-0.02em' }}>
-            Skills Inventory &amp; Inspector
+            {t('技能资产清册与统一金库', 'Skills Inventory & Canonical Vault')}
           </h1>
           <p className="card-subtitle">
-            Browse all discovered <code>SKILL.md</code> and <code>.mdc</code> rules, compare startup vs. on-demand tokens, and inspect bundled resources.
+            {t(
+              '浏览所有平台的 SKILL.md 与 .mdc 规则，查看 Token 成本与免疫判定，或一键纳管进统一金库做跨平台事务同步。',
+              'Browse SKILL.md & .mdc rules across platforms, inspect token & immune status, and sync cleanly via the transactional Vault.',
+            )}
           </p>
         </div>
-        <span className="badge badge-neutral">{filtered.length} of {skills.length} skills</span>
+        <span className="badge badge-neutral">
+          {t(`显示 ${filtered.length} / ${skills.length} 个技能`, `${filtered.length} of ${skills.length} skills`)}
+        </span>
       </div>
+
+      {/* Vault & Sync Control Card */}
+      <VaultPanel query={query} onRefreshWorkspace={onRefreshWorkspace} />
 
       <article className="card">
         <search className="row-wrap" style={{ justifyContent: 'space-between' }}>
           <div className="row-wrap" style={{ flex: '1 1 280px' }}>
             <label htmlFor="skill-search-input" className="sr-only">
-              Filter skills by name or description
+              {t('按名称或描述筛选技能', 'Filter skills by name or description')}
             </label>
             <div style={{ position: 'relative', flex: '1 1 240px', display: 'flex', alignItems: 'center' }}>
               <Search
@@ -108,20 +132,20 @@ export function SkillsView({
                 id="skill-search-input"
                 type="search"
                 className="input"
-                placeholder="Search skills, triggers, or descriptions..."
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('搜索技能名、触发词或描述...', 'Search skills, triggers, or descriptions...')}
+                value={searchText}
+                onChange={(e) => setSearchText(e.target.value)}
                 style={{ inlineSize: '100%', paddingInlineStart: '2.1rem' }}
               />
             </div>
 
-            <div className="segmented" role="group" aria-label="Filter by platform">
+            <div className="segmented" role="group" aria-label={t('按平台筛选', 'Filter by platform')}>
               <button
                 type="button"
                 aria-pressed={platformFilter === 'all'}
                 onClick={() => setPlatformFilter('all')}
               >
-                All
+                {t('全部', 'All')}
               </button>
               {platforms.map((p) => (
                 <button
@@ -138,7 +162,7 @@ export function SkillsView({
 
           <div className="row-wrap">
             <label htmlFor="skill-sort" className="muted" style={{ fontSize: '0.8rem' }}>
-              Sort:
+              {t('排序：', 'Sort:')}
             </label>
             <select
               id="skill-sort"
@@ -146,9 +170,9 @@ export function SkillsView({
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value as 'startup' | 'body' | 'name')}
             >
-              <option value="startup">Highest Startup Tokens</option>
-              <option value="body">Largest Body Tokens</option>
-              <option value="name">Name (A–Z)</option>
+              <option value="startup">{t('按常驻 Token 从高到低', 'Highest Startup Tokens')}</option>
+              <option value="body">{t('按正文 Token 从高到低', 'Largest Body Tokens')}</option>
+              <option value="name">{t('按名称 (A–Z)', 'Name (A–Z)')}</option>
             </select>
           </div>
         </search>
@@ -160,27 +184,28 @@ export function SkillsView({
           className="table-wrapper"
         >
           <table className="data-table">
-            <caption id="skills-table-caption">Discovered AI Agent Skills Inventory</caption>
+            <caption id="skills-table-caption">{t('已发现的 AI Agent 技能清册', 'Discovered AI Agent Skills Inventory')}</caption>
             <thead>
               <tr>
-                <th style={{ inlineSize: '23%' }}>Skill Name</th>
-                <th style={{ inlineSize: '13%' }}>Platform</th>
-                <th style={{ inlineSize: '30%' }}>Description</th>
-                <th style={{ inlineSize: '11%' }}>Startup</th>
-                <th style={{ inlineSize: '11%' }}>Body</th>
-                <th style={{ inlineSize: '12%' }}>Status</th>
+                <th style={{ inlineSize: '22%' }}>{t('技能名称', 'Skill Name')}</th>
+                <th style={{ inlineSize: '12%' }}>{t('所属平台', 'Platform')}</th>
+                <th style={{ inlineSize: '29%' }}>{t('描述摘要', 'Description')}</th>
+                <th style={{ inlineSize: '10%' }}>{t('常驻', 'Startup')}</th>
+                <th style={{ inlineSize: '10%' }}>{t('正文', 'Body')}</th>
+                <th style={{ inlineSize: '17%' }}>{t('体检 / 免疫', 'Status')}</th>
               </tr>
             </thead>
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="muted" style={{ textAlign: 'center', padding: '2rem' }}>
-                    No skills match the current filter.
+                    {t('没有符合当前筛选条件的技能。', 'No skills match the current filter.')}
                   </td>
                 </tr>
               ) : (
                 filtered.map((skill) => {
                   const counts = issueCountBySkill.get(skill.id);
+                  const imm = immuneMap.get(skill.id);
                   const hasErrors = (counts?.errors ?? 0) > 0;
                   const hasWarnings = (counts?.warnings ?? 0) > 0;
 
@@ -204,39 +229,45 @@ export function SkillsView({
                           <span className="truncate-line">{skill.name}</span>
                         </button>
                       </th>
-                      <td data-label="Platform">
+                      <td data-label={t('所属平台', 'Platform')}>
                         <span className="badge badge-neutral">{skill.platform}</span>
                       </td>
-                      <td data-label="Description">
+                      <td data-label={t('描述摘要', 'Description')}>
                         <span className="truncate-line muted">
-                          {skill.description || '(missing description)'}
+                          {skill.description || t('(缺少描述)', '(missing description)')}
                         </span>
                       </td>
-                      <td data-label="Startup" className="mono">
+                      <td data-label={t('常驻', 'Startup')} className="mono">
                         <span className={skill.tokens.startupTokens >= 240 ? 'badge badge-danger' : ''}>
                           {skill.tokens.startupTokens}t
                         </span>
                       </td>
-                      <td data-label="Body" className="mono">
+                      <td data-label={t('正文', 'Body')} className="mono">
                         {skill.tokens.bodyTokens}t
                       </td>
-                      <td data-label="Status">
+                      <td data-label={t('体检 / 免疫', 'Status')}>
                         <div className="row-wrap" style={{ justifyContent: 'space-between' }}>
-                          {hasErrors ? (
-                            <span className="badge badge-danger">
-                              <AlertCircle size={12} aria-hidden="true" /> {counts!.errors} err
-                            </span>
-                          ) : hasWarnings ? (
-                            <span className="badge badge-warn">{counts!.warnings} warn</span>
-                          ) : (
-                            <span className="badge badge-ok">
-                              <CheckCircle2 size={12} aria-hidden="true" /> clean
-                            </span>
-                          )}
+                          <div className="row-wrap">
+                            {imm?.verdict === 'quarantine' ? (
+                              <span className="badge badge-danger">
+                                <ShieldAlert size={12} aria-hidden="true" /> {t('隔离', 'QUARANTINE')}
+                              </span>
+                            ) : hasErrors ? (
+                              <span className="badge badge-danger">
+                                <AlertCircle size={12} aria-hidden="true" /> {counts!.errors} {t('错', 'err')}
+                              </span>
+                            ) : hasWarnings ? (
+                              <span className="badge badge-warn">{counts!.warnings} {t('警', 'warn')}</span>
+                            ) : (
+                              <span className="badge badge-ok">
+                                <CheckCircle2 size={12} aria-hidden="true" /> {t('健康', 'clean')}
+                              </span>
+                            )}
+                          </div>
                           <button
                             type="button"
                             className="btn btn-sm"
-                            aria-label={`Inspect ${skill.name}`}
+                            aria-label={`${t('检查', 'Inspect')} ${skill.name}`}
                             onClick={() => onInspectSkill(skill)}
                           >
                             <Eye size={13} aria-hidden="true" />
@@ -276,9 +307,9 @@ export function SkillsView({
                 </p>
               </div>
               <form method="dialog">
-                <button type="submit" className="btn btn-sm" aria-label="Close skill inspector">
+                <button type="submit" className="btn btn-sm" aria-label={t('关闭技能详情', 'Close skill inspector')}>
                   <X size={15} aria-hidden="true" />
-                  Close
+                  {t('关闭', 'Close')}
                 </button>
               </form>
             </header>
@@ -286,31 +317,33 @@ export function SkillsView({
             <div className="dialog-body">
               <div className="grid-kpi">
                 <div className="kpi-card">
-                  <span className="kpi-label">Startup Cost</span>
+                  <span className="kpi-label">{t('常驻启动开销', 'Startup Cost')}</span>
                   <span className="kpi-value" style={{ fontSize: '1.25rem' }}>
                     {inspectedSkill.tokens.startupTokens}t
                   </span>
-                  <span className="kpi-meta">{inspectedSkill.tokens.descriptionChars} description chars</span>
+                  <span className="kpi-meta">{inspectedSkill.tokens.descriptionChars} {t('字符描述', 'chars')}</span>
                 </div>
                 <div className="kpi-card">
-                  <span className="kpi-label">On-Demand Body</span>
+                  <span className="kpi-label">{t('按需正文开销', 'On-Demand Body')}</span>
                   <span className="kpi-value" style={{ fontSize: '1.25rem' }}>
                     {inspectedSkill.tokens.bodyTokens}t
                   </span>
-                  <span className="kpi-meta">{inspectedSkill.tokens.bodyLineCount} markdown lines</span>
+                  <span className="kpi-meta">{inspectedSkill.tokens.bodyLineCount} {t('行 Markdown', 'lines')}</span>
                 </div>
                 <div className="kpi-card">
-                  <span className="kpi-label">Bundled Assets</span>
+                  <span className="kpi-label">{t('附带资源文件', 'Bundled Assets')}</span>
                   <span className="kpi-value" style={{ fontSize: '1.25rem' }}>
                     {inspectedSkill.resources.length}
                   </span>
-                  <span className="kpi-meta">{inspectedSkill.tokens.resourceTokens}t text resources</span>
+                  <span className="kpi-meta">{inspectedSkill.tokens.resourceTokens}t</span>
                 </div>
               </div>
 
               {inspectedIssues.length > 0 && (
-                <section className="stack-sm" aria-label="Skill diagnostics">
-                  <h3 style={{ fontSize: '0.9rem', fontWeight: 650 }}>Diagnostics ({inspectedIssues.length})</h3>
+                <section className="stack-sm" aria-label={t('诊断问题', 'Skill diagnostics')}>
+                  <h3 style={{ fontSize: '0.9rem', fontWeight: 650 }}>
+                    {t(`规范与安全诊断 (${inspectedIssues.length})`, `Diagnostics (${inspectedIssues.length})`)}
+                  </h3>
                   {inspectedIssues.map((issue) => (
                     <div
                       key={issue.id}
@@ -333,7 +366,7 @@ export function SkillsView({
                         <strong style={{ fontSize: '0.84rem' }}>{issue.message}</strong>
                       </div>
                       <p style={{ fontSize: '0.8rem', marginBlockStart: '0.25rem' }}>
-                        Fix: {issue.suggestion}
+                        {t('修复建议：', 'Fix: ')}{issue.suggestion}
                       </p>
                     </div>
                   ))}
@@ -342,7 +375,7 @@ export function SkillsView({
 
               <div className="grid-two">
                 <div className="stack-sm">
-                  <h3 style={{ fontSize: '0.88rem', fontWeight: 650 }}>Extracted Trigger Phrases</h3>
+                  <h3 style={{ fontSize: '0.88rem', fontWeight: 650 }}>{t('提取的显式触发词', 'Extracted Trigger Phrases')}</h3>
                   {inspectedSkill.triggerPhrases.length > 0 ? (
                     <div className="row-wrap">
                       {inspectedSkill.triggerPhrases.map((p) => (
@@ -350,12 +383,12 @@ export function SkillsView({
                       ))}
                     </div>
                   ) : (
-                    <p className="muted" style={{ fontSize: '0.82rem' }}>No explicit quoted/listed trigger phrases parsed.</p>
+                    <p className="muted" style={{ fontSize: '0.82rem' }}>{t('未提取到显式触发词列表。', 'No explicit quoted/listed trigger phrases parsed.')}</p>
                   )}
                 </div>
 
                 <div className="stack-sm">
-                  <h3 style={{ fontSize: '0.88rem', fontWeight: 650 }}>Negative Boundaries</h3>
+                  <h3 style={{ fontSize: '0.88rem', fontWeight: 650 }}>{t('反向排除边界', 'Negative Boundaries')}</h3>
                   {inspectedSkill.negativeTriggers.length > 0 ? (
                     <div className="row-wrap">
                       {inspectedSkill.negativeTriggers.map((neg) => (
@@ -363,7 +396,7 @@ export function SkillsView({
                       ))}
                     </div>
                   ) : (
-                    <p className="muted" style={{ fontSize: '0.82rem' }}>None defined. Adding &ldquo;Do NOT use for...&rdquo; prevents false triggers.</p>
+                    <p className="muted" style={{ fontSize: '0.82rem' }}>{t('未声明反向排除边界，建议补充“不负责.../Do NOT use for...”。', 'None defined.')}</p>
                   )}
                 </div>
               </div>
@@ -372,7 +405,7 @@ export function SkillsView({
                 <section className="stack-sm">
                   <h3 style={{ fontSize: '0.88rem', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                     <FolderTree size={15} aria-hidden="true" />
-                    Bundled Resource Files
+                    {t('附带脚本与参考资料', 'Bundled Resource Files')}
                   </h3>
                   <div className="row-wrap">
                     {inspectedSkill.resources.map((res) => (
@@ -387,7 +420,7 @@ export function SkillsView({
               <section className="stack-sm">
                 <h3 style={{ fontSize: '0.88rem', fontWeight: 650, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                   <FileText size={15} aria-hidden="true" />
-                  Markdown Body Preview
+                  {t('SKILL.md 正文预览', 'Markdown Body Preview')}
                 </h3>
                 <pre
                   className="code-block"

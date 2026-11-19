@@ -1,28 +1,51 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
+  Bot,
   Compass,
   FolderSearch,
   GitCompareArrows,
+  Languages,
   Laptop,
   LayoutDashboard,
   Layers,
   Moon,
+  Radio,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   Sparkles,
   Sun,
   Workflow,
 } from 'lucide-react';
-import type { SkillRecord, WorkspaceReport } from '@skilldeck/core';
-import { fetchWorkspaceReport, type WorkspaceMode, type WorkspaceQuery } from './api.js';
+import type { SkillRecord, WorkflowGraph, WorkspaceReport } from '@skilldeck/core';
+import {
+  fetchHubStatus,
+  fetchWorkspaceReport,
+  type HubStatusSnapshot,
+  type WorkspaceMode,
+  type WorkspaceQuery,
+} from './api.js';
 import { AuditMcpView } from './components/AuditMcpView.js';
 import { ConflictsView } from './components/ConflictsView.js';
+import { HubView } from './components/HubView.js';
+import { ImmuneView } from './components/ImmuneView.js';
 import { OverviewView } from './components/OverviewView.js';
 import { RouterSandboxView } from './components/RouterSandboxView.js';
 import { SkillsView } from './components/SkillsView.js';
+import { SuperAgentView } from './components/SuperAgentView.js';
 import { WorkflowExportView } from './components/WorkflowExportView.js';
+import { useI18n } from './i18n.js';
 
-type ActiveTab = 'overview' | 'skills' | 'router' | 'conflicts' | 'audit' | 'workflow';
+type ActiveTab =
+  | 'overview'
+  | 'superagent'
+  | 'immune'
+  | 'hub'
+  | 'skills'
+  | 'router'
+  | 'conflicts'
+  | 'audit'
+  | 'workflow';
 type ThemeOverride = 'system' | 'light' | 'dark';
 
 function readStoredTheme(): ThemeOverride {
@@ -43,15 +66,18 @@ function applyThemeMeta(override: ThemeOverride): void {
 }
 
 export function App() {
+  const { lang, toggleLang, t } = useI18n();
   const [activeTab, setActiveTab] = useState<ActiveTab>('overview');
   const [mode, setMode] = useState<WorkspaceMode>('demo');
   const [customPath, setCustomPath] = useState('');
   const [includeBuiltin, setIncludeBuiltin] = useState(false);
 
   const [report, setReport] = useState<WorkspaceReport | null>(null);
+  const [hubStatus, setHubStatus] = useState<HubStatusSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [inspectedSkill, setInspectedSkill] = useState<SkillRecord | null>(null);
+  const [externalGraph, setExternalGraph] = useState<WorkflowGraph | null>(null);
 
   const [themeOverride, setThemeOverride] = useState<ThemeOverride>(() => readStoredTheme());
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() =>
@@ -60,7 +86,6 @@ export function App() {
       : false,
   );
 
-  // Sync system preference changes & cross-tab storage updates cleanly
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
     const onMqChange = (event: MediaQueryListEvent) => setSystemPrefersDark(event.matches);
@@ -81,7 +106,6 @@ export function App() {
     };
   }, []);
 
-  // Two-state color-scheme toggle per modern-web-guidance dark-mode-toggle spec
   function handleToggleColorScheme() {
     const currentlyRenderedDark =
       themeOverride === 'dark' || (themeOverride === 'system' && systemPrefersDark);
@@ -111,12 +135,25 @@ export function App() {
 
   const query: WorkspaceQuery = { mode, customPath, includeBuiltin };
 
+  const loadHub = useCallback(async () => {
+    try {
+      const status = await fetchHubStatus({ mode, customPath, includeBuiltin });
+      setHubStatus(status);
+    } catch {
+      // Non-fatal
+    }
+  }, [mode, customPath, includeBuiltin]);
+
   const loadReport = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchWorkspaceReport({ mode, customPath, includeBuiltin });
+      const [data, hub] = await Promise.all([
+        fetchWorkspaceReport({ mode, customPath, includeBuiltin }),
+        fetchHubStatus({ mode, customPath, includeBuiltin }).catch(() => null),
+      ]);
       setReport(data);
+      if (hub) setHubStatus(hub);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to reach SkillDeck API');
     } finally {
@@ -133,8 +170,16 @@ export function App() {
     setActiveTab('skills');
   }
 
+  function handleSendToWorkflow(graph: WorkflowGraph) {
+    setExternalGraph(graph);
+    setActiveTab('workflow');
+  }
+
   const isDarkRendered =
     themeOverride === 'dark' || (themeOverride === 'system' && systemPrefersDark);
+
+  const pendingQuarantineCount =
+    hubStatus?.quarantineQueue.filter((q) => q.status === 'pending').length ?? 0;
 
   const navItems: Array<{
     id: ActiveTab;
@@ -143,29 +188,50 @@ export function App() {
     badge?: string | number;
     badgeTone?: string;
   }> = [
-    { id: 'overview', label: 'Overview', icon: LayoutDashboard },
+    { id: 'overview', label: t('总览看板', 'Overview'), icon: LayoutDashboard },
+    { id: 'superagent', label: t('SuperAgent 指挥台', 'SuperAgent'), icon: Bot },
+    {
+      id: 'immune',
+      label: t('Agent 免疫系统', 'Agent-Immune'),
+      icon: ShieldAlert,
+      badge: report
+        ? report.immune.quarantineCount + pendingQuarantineCount ||
+          report.immune.agentImmuneBridge.activePitfallCount
+        : undefined,
+      badgeTone:
+        (report?.immune.quarantineCount ?? 0) + pendingQuarantineCount > 0
+          ? 'badge-danger'
+          : 'badge-ok',
+    },
+    {
+      id: 'hub',
+      label: t('MCP 聚合网关', 'MCP Hub'),
+      icon: Radio,
+      badge: hubStatus ? `-${hubStatus.estimatedTokenSavingsPct}%` : undefined,
+      badgeTone: 'badge-accent',
+    },
     {
       id: 'skills',
-      label: 'Skills Inventory',
+      label: t('技能资产与金库', 'Skills & Vault'),
       icon: Layers,
       badge: report?.summary.skillCount,
     },
-    { id: 'router', label: 'Prompt Sandbox', icon: Compass },
+    { id: 'router', label: t('路由仿真沙盒', 'Prompt Sandbox'), icon: Compass },
     {
       id: 'conflicts',
-      label: 'Conflict Radar',
+      label: t('触发冲突雷达', 'Conflict Radar'),
       icon: GitCompareArrows,
       badge: report?.conflicts.length,
       badgeTone: (report?.summary.highConflictCount ?? 0) > 0 ? 'badge-danger' : 'badge-neutral',
     },
     {
       id: 'audit',
-      label: 'MCP & Audit',
+      label: t('MCP 与规范审计', 'MCP & Audit'),
       icon: ShieldCheck,
       badge: report ? report.summary.errorCount + report.summary.warningCount : undefined,
       badgeTone: (report?.summary.errorCount ?? 0) > 0 ? 'badge-danger' : 'badge-warn',
     },
-    { id: 'workflow', label: 'Workflow & Export', icon: Workflow },
+    { id: 'workflow', label: t('画布编排与运行', 'Workflow & Export'), icon: Workflow },
   ];
 
   return (
@@ -176,36 +242,26 @@ export function App() {
             <Layers size={19} />
           </div>
           <div>
-            <div className="brand-title">SkillDeck</div>
-            <div className="brand-sub">AI Agent Skills &amp; MCP Control Tower</div>
+            <div className="brand-title">SkillDeck v0.2</div>
+            <div className="brand-sub">
+              {t('SuperAgent 超级总控 · MCP 聚合网关 · Agent-Immune 双层免疫', 'SuperAgent Control Tower · MCP Hub · Agent-Immune Shield')}
+            </div>
           </div>
         </div>
 
         <div className="topbar-controls">
-          <div className="segmented" role="group" aria-label="Workspace scan source">
-            <button
-              type="button"
-              aria-pressed={mode === 'demo'}
-              onClick={() => setMode('demo')}
-            >
+          <div className="segmented" role="group" aria-label={t('选择扫描来源', 'Workspace scan source')}>
+            <button type="button" aria-pressed={mode === 'demo'} onClick={() => setMode('demo')}>
               <Sparkles size={13} aria-hidden="true" />
-              Demo Workspace
+              {t('演示环境', 'Demo')}
             </button>
-            <button
-              type="button"
-              aria-pressed={mode === 'local'}
-              onClick={() => setMode('local')}
-            >
+            <button type="button" aria-pressed={mode === 'local'} onClick={() => setMode('local')}>
               <Laptop size={13} aria-hidden="true" />
-              My Machine (Read-Only)
+              {t('扫描本机（只读）', 'My Machine')}
             </button>
-            <button
-              type="button"
-              aria-pressed={mode === 'custom'}
-              onClick={() => setMode('custom')}
-            >
+            <button type="button" aria-pressed={mode === 'custom'} onClick={() => setMode('custom')}>
               <FolderSearch size={13} aria-hidden="true" />
-              Custom Path
+              {t('自定义目录', 'Custom')}
             </button>
           </div>
 
@@ -216,7 +272,7 @@ export function App() {
                 checked={includeBuiltin}
                 onChange={(e) => setIncludeBuiltin(e.target.checked)}
               />
-              Include built-in skills
+              {t('含内置技能', 'Built-ins')}
             </label>
           )}
 
@@ -229,7 +285,7 @@ export function App() {
               }}
             >
               <label htmlFor="custom-dir-input" className="sr-only">
-                Custom directory path to scan
+                {t('自定义扫描目录路径', 'Custom directory path')}
               </label>
               <input
                 id="custom-dir-input"
@@ -238,9 +294,9 @@ export function App() {
                 placeholder="e.g. D:\my-project\.claude"
                 value={customPath}
                 onChange={(e) => setCustomPath(e.target.value)}
-                style={{ inlineSize: '210px', paddingBlock: '0.32rem', fontSize: '0.8rem' }}
+                style={{ inlineSize: '190px', paddingBlock: '0.32rem', fontSize: '0.8rem' }}
               />
-              <button type="submit" className="btn btn-sm">Scan</button>
+              <button type="submit" className="btn btn-sm">{t('扫描', 'Scan')}</button>
             </form>
           )}
 
@@ -249,26 +305,36 @@ export function App() {
             className="btn btn-sm"
             onClick={() => void loadReport()}
             disabled={loading}
-            aria-label="Rescan workspace"
+            aria-label={t('重新扫描工作区', 'Rescan workspace')}
           >
             <RefreshCw size={14} aria-hidden="true" />
-            Rescan
+            {t('刷新', 'Rescan')}
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={toggleLang}
+            aria-label={lang === 'zh' ? 'Switch to English' : '切换为简体中文'}
+          >
+            <Languages size={14} aria-hidden="true" />
+            <span>{lang === 'zh' ? 'EN' : '中文'}</span>
           </button>
 
           <button
             type="button"
             className="btn btn-sm"
             onClick={handleToggleColorScheme}
-            aria-label={isDarkRendered ? 'Switch to light theme' : 'Switch to dark theme'}
+            aria-label={isDarkRendered ? t('切换浅色模式', 'Switch to light theme') : t('切换深色模式', 'Switch to dark theme')}
           >
             {isDarkRendered ? <Sun size={14} aria-hidden="true" /> : <Moon size={14} aria-hidden="true" />}
-            <span>{isDarkRendered ? 'Light' : 'Dark'}</span>
+            <span>{isDarkRendered ? t('浅色', 'Light') : t('深色', 'Dark')}</span>
           </button>
         </div>
       </header>
 
       <div className="workspace-body">
-        <aside className="sidebar" aria-label="Primary control tower navigation">
+        <aside className="sidebar" aria-label={t('主控制塔导航', 'Primary navigation')}>
           <nav>
             <ul className="nav-list">
               {navItems.map((item) => {
@@ -300,19 +366,21 @@ export function App() {
           {report && (
             <div className="sidebar-summary">
               <div className="row-wrap" style={{ justifyContent: 'space-between' }}>
-                <span className="muted">Mode</span>
+                <span className="muted">{t('模式', 'Mode')}</span>
                 <span className="badge badge-accent">{report.mode}</span>
               </div>
               <div className="row-wrap" style={{ justifyContent: 'space-between' }}>
-                <span className="muted">Health Score</span>
-                <strong className="mono">{report.summary.healthScore}/100</strong>
+                <span className="muted">{t('健康 / 免疫', 'Health / Immune')}</span>
+                <strong className="mono">
+                  {report.summary.healthScore} / {report.summary.immunityScore}
+                </strong>
               </div>
               <div className="row-wrap" style={{ justifyContent: 'space-between' }}>
-                <span className="muted">Always-On</span>
+                <span className="muted">{t('常驻开销', 'Always-On')}</span>
                 <strong className="mono">{report.budget.totalAlwaysOnTokens.toLocaleString()}t</strong>
               </div>
               <div className="muted" style={{ fontSize: '0.72rem', marginBlockStart: '0.2rem' }}>
-                100% local · zero cloud telemetry · read-only discovery
+                {t('100% 本地运行 · 零云端上报 · 原生兼容 agent-immune', '100% local · zero telemetry · agent-immune native')}
               </div>
             </div>
           )}
@@ -322,12 +390,12 @@ export function App() {
           {error && (
             <article className="card" role="alert" style={{ borderColor: 'var(--danger)' }}>
               <h2 className="card-title" style={{ color: 'var(--danger)' }}>
-                Failed to load workspace telemetry
+                {t('无法连接 SkillDeck 本地服务端', 'Failed to load workspace telemetry')}
               </h2>
               <p>{error}</p>
               <div>
                 <button type="button" className="btn btn-sm" onClick={() => void loadReport()}>
-                  Retry Scan
+                  {t('重试', 'Retry')}
                 </button>
               </div>
             </article>
@@ -335,7 +403,7 @@ export function App() {
 
           {loading && !report ? (
             <article className="card" style={{ padding: '3rem', alignItems: 'center' }}>
-              <p className="muted">Scanning Agent Skills and MCP configurations...</p>
+              <p className="muted">{t('正在扫描本机 Agent Skills、MCP 配置与 agent-immune 数据库...', 'Scanning Agent Skills, MCP configs & agent-immune databases...')}</p>
             </article>
           ) : report ? (
             <>
@@ -346,12 +414,36 @@ export function App() {
                   onNavigate={(tab) => setActiveTab(tab)}
                 />
               )}
+              {activeTab === 'superagent' && (
+                <SuperAgentView query={query} onSendToWorkflow={handleSendToWorkflow} />
+              )}
+              {activeTab === 'immune' && (
+                <ImmuneView
+                  immune={report.immune}
+                  skills={report.skills}
+                  quarantineQueue={hubStatus?.quarantineQueue ?? []}
+                  query={query}
+                  onRefresh={() => void loadReport()}
+                  onRefreshHub={() => void loadHub()}
+                />
+              )}
+              {activeTab === 'hub' && (
+                <HubView
+                  hubStatus={hubStatus}
+                  mcpServers={report.mcpServers}
+                  query={query}
+                  onRefreshHub={() => void loadHub()}
+                />
+              )}
               {activeTab === 'skills' && (
                 <SkillsView
                   skills={report.skills}
                   issues={report.issues}
+                  immuneReports={report.immune.skillReports}
                   inspectedSkill={inspectedSkill}
                   onInspectSkill={setInspectedSkill}
+                  query={query}
+                  onRefreshWorkspace={() => void loadReport()}
                 />
               )}
               {activeTab === 'router' && <RouterSandboxView query={query} />}
@@ -371,6 +463,7 @@ export function App() {
                   mcpServers={report.mcpServers}
                   query={query}
                   colorMode={isDarkRendered ? 'dark' : 'light'}
+                  externalGraph={externalGraph}
                 />
               )}
             </>

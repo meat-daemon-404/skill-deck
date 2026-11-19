@@ -39,6 +39,9 @@ jobs:
       - name: Smoke test CLI against demo workspace
         run: |
           node packages/cli/dist/cli.js scan --demo --json > /dev/null
+          node packages/cli/dist/cli.js immune --demo
+          node packages/cli/dist/cli.js agents
           node packages/cli/dist/cli.js budget --demo
           node packages/cli/dist/cli.js conflicts --demo
           node packages/cli/dist/cli.js route --demo "Deploy a Cloudflare Worker with Supabase auth"
+          node packages/cli/dist/cli.js run --demo "Deploy a Cloudflare Worker with wrangler.toml"

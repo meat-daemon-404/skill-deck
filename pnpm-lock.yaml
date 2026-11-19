@@ -57,6 +57,9 @@ importers:
       '@skilldeck/core':
         specifier: workspace:*
         version: link:../core
+      '@skilldeck/hub':
+        specifier: workspace:*
+        version: link:../hub
       '@skilldeck/server':
         specifier: workspace:*
         version: link:../server
@@ -67,11 +70,20 @@ importers:
         specifier: ^2.7.0
         version: 2.9.1
 
+  packages/hub:
+    dependencies:
+      '@skilldeck/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/server:
     dependencies:
       '@skilldeck/core':
         specifier: workspace:*
         version: link:../core
+      '@skilldeck/hub':
+        specifier: workspace:*
+        version: link:../hub
 
 packages:
 

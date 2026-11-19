@@ -1,6 +1,6 @@
 {
   "name": "@skilldeck/web",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Interactive Web Control Tower for SkillDeck.",
   "license": "MIT",
   "private": true,

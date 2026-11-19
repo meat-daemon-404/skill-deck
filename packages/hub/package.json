@@ -1,0 +1,23 @@
+{
+  "name": "@skilldeck/hub",
+  "version": "0.2.0",
+  "description": "Local MCP Aggregation Gateway & Meta-Server for SkillDeck with progressive-disclosure tool routing, Agent-Immune runtime firewall, and live call telemetry.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "clean": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\""
+  },
+  "dependencies": {
+    "@skilldeck/core": "workspace:*"
+  }
+}

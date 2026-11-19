@@ -1,7 +1,7 @@
 {
   "name": "@skilldeck/cli",
-  "version": "0.1.0",
-  "description": "Command-line interface for SkillDeck — scan, lint, budget, detect trigger conflicts, simulate routing, export bundles, and serve the Web Control Tower.",
+  "version": "0.2.0",
+  "description": "Command-line interface for SkillDeck — scan, lint, budget, conflicts, route, immune, hub (MCP stdio gateway), SuperAgent runner, export, and serve.",
   "license": "MIT",
   "type": "module",
   "main": "./dist/cli.js",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@skilldeck/core": "workspace:*",
+    "@skilldeck/hub": "workspace:*",
     "@skilldeck/server": "workspace:*"
   }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@skilldeck/core",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Core analysis engine for SkillDeck: Agent Skills (SKILL.md) parser, MCP auditor, token budget estimator, bilingual trigger conflict radar, prompt router, and cross-platform exporter.",
   "license": "MIT",
   "type": "module",

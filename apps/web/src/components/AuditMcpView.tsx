@@ -10,6 +10,7 @@ import {
   Terminal,
 } from 'lucide-react';
 import type { LintIssue, LintSeverity, McpServerRecord } from '@skilldeck/core';
+import { useI18n } from '../i18n.js';
 
 interface AuditMcpViewProps {
   mcpServers: McpServerRecord[];
@@ -17,6 +18,7 @@ interface AuditMcpViewProps {
 }
 
 export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
+  const { t } = useI18n();
   const [severityFilter, setSeverityFilter] = useState<'all' | LintSeverity>('all');
 
   const filteredIssues = useMemo(() => {
@@ -32,10 +34,13 @@ export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
     <section className="stack-md" aria-labelledby="audit-heading">
       <div>
         <h1 id="audit-heading" style={{ fontSize: '1.35rem', fontWeight: 750, letterSpacing: '-0.02em' }}>
-          MCP Servers &amp; Security Audit
+          {t('MCP 配置与规范安全审计', 'MCP Servers & Spec Security Audit')}
         </h1>
         <p className="card-subtitle">
-          Read-only MCP inventory with automatic credential redaction, executable PATH verification, and Agent Skills specification lint diagnostics.
+          {t(
+            '严格只读扫描 MCP 配置，渲染前自动遮罩敏感密钥、检测本机 PATH 可执行文件并按 14 条规则诊断规范漂移。',
+            'Read-only MCP inventory with automatic credential redaction, executable PATH verification, and 14-rule spec diagnostics.',
+          )}
         </p>
       </div>
 
@@ -44,13 +49,15 @@ export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
         <div className="card-header">
           <h2 className="card-title">
             <Server size={17} aria-hidden="true" />
-            Discovered MCP Servers ({mcpServers.length})
+            {t(`已发现 MCP 服务 (${mcpServers.length})`, `Discovered MCP Servers (${mcpServers.length})`)}
           </h2>
-          <span className="badge badge-ok">Secrets auto-redacted before render</span>
+          <span className="badge badge-ok">
+            {t('所有密钥已在核心层自动脱敏', 'Secrets auto-redacted before render')}
+          </span>
         </div>
 
         {mcpServers.length === 0 ? (
-          <p className="muted">No MCP server configurations (`mcpServers`) were found in the scanned roots.</p>
+          <p className="muted">{t('未扫描到 MCP 服务配置。', 'No MCP server configurations found.')}</p>
         ) : (
           <div className="grid-two">
             {mcpServers.map((srv) => {
@@ -76,16 +83,16 @@ export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
                     </div>
                     <div className="row-wrap">
                       {srv.disabled ? (
-                        <span className="badge badge-neutral">disabled</span>
+                        <span className="badge badge-neutral">{t('已禁用', 'disabled')}</span>
                       ) : hasSecrets ? (
                         <span className="badge badge-danger">
-                          <ShieldAlert size={12} aria-hidden="true" /> {srv.secretFindings.length} secret(s)
+                          <ShieldAlert size={12} aria-hidden="true" /> {srv.secretFindings.length} {t('密钥告警', 'secret(s)')}
                         </span>
                       ) : srv.commandAvailable === false ? (
-                        <span className="badge badge-warn">binary missing</span>
+                        <span className="badge badge-warn">{t('缺少命令', 'binary missing')}</span>
                       ) : (
                         <span className="badge badge-ok">
-                          <CheckCircle2 size={12} aria-hidden="true" /> ready
+                          <CheckCircle2 size={12} aria-hidden="true" /> {t('就绪', 'ready')}
                         </span>
                       )}
                     </div>
@@ -102,7 +109,7 @@ export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
 
                   {srv.url && (
                     <div className="mono muted truncate-line" style={{ fontSize: '0.77rem' }}>
-                      Endpoint: {srv.url}
+                      {t('地址：', 'Endpoint: ')}{srv.url}
                     </div>
                   )}
 
@@ -128,7 +135,7 @@ export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
 
                   <div className="row-wrap muted mono" style={{ justifyContent: 'space-between', fontSize: '0.72rem' }}>
                     <span className="truncate-line" style={{ maxInlineSize: '72%' }}>{srv.configPath}</span>
-                    <span>~{srv.estimatedSchemaTokens}t est. schema</span>
+                    <span>~{srv.estimatedSchemaTokens}t</span>
                   </div>
                 </div>
               );
@@ -140,41 +147,27 @@ export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
       {/* Spec & Security Linter Explorer */}
       <article className="card">
         <div className="card-header">
-          <h2 className="card-title">Spec &amp; Security Diagnostics ({issues.length})</h2>
-          <div className="segmented" role="group" aria-label="Filter diagnostics by severity">
-            <button
-              type="button"
-              aria-pressed={severityFilter === 'all'}
-              onClick={() => setSeverityFilter('all')}
-            >
-              All ({issues.length})
+          <h2 className="card-title">
+            {t(`规范与安全诊断列表 (${issues.length})`, `Spec & Security Diagnostics (${issues.length})`)}
+          </h2>
+          <div className="segmented" role="group" aria-label={t('按严重等级筛选', 'Filter diagnostics by severity')}>
+            <button type="button" aria-pressed={severityFilter === 'all'} onClick={() => setSeverityFilter('all')}>
+              {t(`全部 (${issues.length})`, `All (${issues.length})`)}
             </button>
-            <button
-              type="button"
-              aria-pressed={severityFilter === 'error'}
-              onClick={() => setSeverityFilter('error')}
-            >
-              Errors ({errorCount})
+            <button type="button" aria-pressed={severityFilter === 'error'} onClick={() => setSeverityFilter('error')}>
+              {t(`错误 (${errorCount})`, `Errors (${errorCount})`)}
             </button>
-            <button
-              type="button"
-              aria-pressed={severityFilter === 'warning'}
-              onClick={() => setSeverityFilter('warning')}
-            >
-              Warnings ({warningCount})
+            <button type="button" aria-pressed={severityFilter === 'warning'} onClick={() => setSeverityFilter('warning')}>
+              {t(`警告 (${warningCount})`, `Warnings (${warningCount})`)}
             </button>
-            <button
-              type="button"
-              aria-pressed={severityFilter === 'info'}
-              onClick={() => setSeverityFilter('info')}
-            >
-              Info ({infoCount})
+            <button type="button" aria-pressed={severityFilter === 'info'} onClick={() => setSeverityFilter('info')}>
+              {t(`提示 (${infoCount})`, `Info (${infoCount})`)}
             </button>
           </div>
         </div>
 
         {filteredIssues.length === 0 ? (
-          <p className="muted">No diagnostics match the selected severity filter.</p>
+          <p className="muted">{t('当前筛选条件下无诊断问题。', 'No diagnostics match the selected filter.')}</p>
         ) : (
           <div className="stack-sm">
             {filteredIssues.map((issue) => (
@@ -219,7 +212,8 @@ export function AuditMcpView({ mcpServers, issues }: AuditMcpViewProps) {
                 </div>
                 <p style={{ fontSize: '0.85rem' }}>{issue.message}</p>
                 <p className="muted" style={{ fontSize: '0.8rem' }}>
-                  <strong>Suggested fix:</strong> {issue.suggestion}
+                  <strong>{t('修复建议：', 'Suggested fix: ')}</strong>
+                  {issue.suggestion}
                 </p>
               </div>
             ))}

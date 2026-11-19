@@ -2,12 +2,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import {
-  analyzeWorkspace,
+  analyzeWorkspaceAsync,
+  createSuperAgentPlan,
+  detectLocalAgents,
+  executeWorkflowGraph,
   exportBundle,
   simulatePromptRouting,
   type ExportTarget,
   type ScanOptions,
 } from '@skilldeck/core';
+import { startStdioMcpHubServer } from '@skilldeck/hub';
 import {
   resolveDefaultDemoWorkspace,
   startSkillDeckServer,
@@ -121,33 +125,30 @@ function buildScanOptionsFromFlags(flags: ParsedArgs['flags']): ScanOptions {
 
 function printHelp(): void {
   console.log(`
-${c.bold('SkillDeck CLI')} ${c.dim('v0.1.0')} — Local-first Control Tower for AI Agent Skills & MCP
+${c.bold('SkillDeck CLI')} ${c.dim('v0.2.0')} — Local-first SuperAgent Control Tower, MCP Hub & Agent-Immune Shield
 
 ${c.bold('USAGE')}
   skilldeck <command> [options]
 
 ${c.bold('COMMANDS')}
-  scan                  Scan Agent Skills (SKILL.md / .mdc) and MCP configs
+  scan                  Scan Agent Skills (Antigravity/Claude/Cursor/Codex/DSH/ZCode) & MCP configs
   lint                  Audit spec compliance, broken links, and hardcoded secrets
+  immune                Run dual-layer Agent-Immune audit (ToxicSkills + agent-immune SQLite/JSONL pitfall antibodies)
   budget                Analyze always-on startup vs. on-demand context token costs
   conflicts             Detect overlapping bilingual trigger phrases across skills
   route "<prompt>"      Simulate which skills activate for a user prompt
+  agents                Detect locally installed CLI agents (agy, ollama, claude, gemini, codex, gh)
+  run "<goal>"          Plan and run a SuperAgent workflow under Agent-Immune guardrails
+  hub                   Start the real stdio MCP Aggregation Gateway (Meta-Server)
   export                Export sanitized cross-platform bundle (secrets stripped)
-  serve                 Launch the local REST API + interactive Web Control Tower
+  serve                 Launch the local REST API + bilingual Web Control Tower
 
 ${c.bold('COMMON OPTIONS')}
   --demo                Use bundled bilingual demo workspace
-  --local               Scan standard local agent dirs (~/.gemini, ~/.claude, ~/.cursor, ~/.codex)
+  --local               Scan standard local agent dirs (~/.gemini, ~/.claude, ~/.cursor, ~/.codex, ~/.dsh, ~/.zcode)
   --path <dir>          Scan one or more custom directories (repeatable)
   --include-builtin     Include built-in Antigravity skills during --local scan
   --json                Output machine-readable JSON (ideal for CI)
-
-${c.bold('EXAMPLES')}
-  skilldeck scan --demo
-  skilldeck lint --local --strict
-  skilldeck route --demo "Deploy a Cloudflare Worker with Wrangler"
-  skilldeck export --demo --target claude-code --out .skilldeck-export/claude
-  skilldeck serve --demo --port 4173
 `);
 }
 
@@ -167,20 +168,44 @@ async function main(): Promise<void> {
 
   const asJson = Boolean(flags.json);
 
+  if (command === 'hub') {
+    const scanOptions = buildScanOptionsFromFlags(flags);
+    startStdioMcpHubServer({ scanOptions });
+    return;
+  }
+
   if (command === 'serve') {
     const port = flags.port ? Number(flags.port) : 4173;
     const host = typeof flags.host === 'string' ? flags.host : '127.0.0.1';
     const defaultMode = flags.local ? 'local' : 'demo';
 
     const { url } = await startSkillDeckServer({ port, host, defaultMode });
-    console.log(`\n  ${c.bold(c.cyan('SkillDeck Control Tower'))} running at ${c.bold(url)}`);
+    console.log(`\n  ${c.bold(c.cyan('SkillDeck Control Tower v0.2'))} running at ${c.bold(url)}`);
     console.log(`  ${c.dim(`Default workspace mode: ${defaultMode} (switchable live inside the UI)`)}`);
     console.log(`  ${c.dim('Press Ctrl+C to stop.')}\n`);
     return;
   }
 
+  if (command === 'agents') {
+    const agents = await detectLocalAgents();
+    if (asJson) {
+      console.log(JSON.stringify(agents, null, 2));
+      return;
+    }
+    console.log(`\n${c.bold('Detected Local AI CLI Agents & Runtimes')}\n`);
+    for (const a of agents) {
+      const badge = a.available ? c.green('READY  ') : c.dim('MISSING');
+      console.log(`  ${badge} ${c.cyan(a.name.padEnd(22))} (${a.command}) — ${a.statusNote}`);
+      if (a.models && a.models.length > 0) {
+        console.log(`          Models: ${a.models.join(', ')}`);
+      }
+    }
+    console.log('');
+    return;
+  }
+
   const scanOpts = buildScanOptionsFromFlags(flags);
-  const report = analyzeWorkspace(scanOpts);
+  const report = await analyzeWorkspaceAsync(scanOpts);
 
   if (command === 'scan') {
     if (asJson) {
@@ -198,44 +223,78 @@ async function main(): Promise<void> {
     console.log(`\n${c.bold('SkillDeck Scan Report')} ${c.dim(`(${report.mode})`)}`);
     console.log(
       `Health: ${scoreColor(c.bold(`${report.summary.healthScore}/100`))}  |  ` +
+        `Immunity: ${c.bold(`${report.summary.immunityScore}/100`)}  |  ` +
         `Skills: ${c.bold(String(report.summary.skillCount))}  |  ` +
         `MCP Servers: ${c.bold(String(report.summary.mcpServerCount))}  |  ` +
-        `Always-On Tokens: ${c.bold(report.budget.totalAlwaysOnTokens.toLocaleString())}`,
+        `Always-On: ${c.bold(report.budget.totalAlwaysOnTokens.toLocaleString())}t`,
     );
     console.log(
       `Issues: ${c.red(`${report.summary.errorCount} errors`)}, ` +
-        `${c.yellow(`${report.summary.warningCount} warnings`)}, ` +
-        `${c.dim(`${report.summary.infoCount} info`)}  |  ` +
-        `Trigger Conflicts: ${c.bold(String(report.conflicts.length))}\n`,
+        `${c.yellow(`${report.summary.warningCount} warnings`)}  |  ` +
+        `Quarantined Skills: ${c.red(String(report.summary.quarantineSkillCount))}  |  ` +
+        `Pitfall Antibodies (agent-immune): ${c.cyan(String(report.immune.agentImmuneBridge.activePitfallCount))}\n`,
     );
+    return;
+  }
 
-    if (report.skills.length > 0) {
-      console.log(c.bold('Discovered Skills:'));
-      for (const s of report.skills) {
-        console.log(
-          `  • ${c.cyan(s.name.padEnd(28))} ${c.dim(s.platform.padEnd(12))} ` +
-            `startup=${String(s.tokens.startupTokens).padStart(4)}t  body=${String(s.tokens.bodyTokens).padStart(5)}t`,
-        );
+  if (command === 'immune') {
+    if (asJson) {
+      console.log(JSON.stringify(report.immune, null, 2));
+      return;
+    }
+    const { immune } = report;
+    console.log(
+      `\n${c.bold('Agent-Immune Dual-Layer Report')} — Immunity ${c.bold(`${immune.immunityScore}/100`)} ` +
+        `(Safe=${immune.safeCount}, Caution=${immune.cautionCount}, Quarantine=${immune.quarantineCount})\n`,
+    );
+    if (immune.findings.length > 0) {
+      console.log(c.bold('Security Findings (ToxicSkills / Prompt Injection):'));
+      for (const f of immune.findings) {
+        console.log(`  ${c.red(f.severity.toUpperCase().padEnd(8))} ${c.bold(f.ruleId)} [${f.targetName}] ${f.title}`);
+        console.log(`           Evidence: ${c.dim(f.evidence)}`);
       }
       console.log('');
     }
-
-    if (report.mcpServers.length > 0) {
-      console.log(c.bold('Discovered MCP Servers:'));
-      for (const m of report.mcpServers) {
-        const status = m.disabled
-          ? c.dim('disabled')
-          : m.secretFindings.length > 0
-            ? c.red(`SECRET(${m.secretFindings.length})`)
-            : m.commandAvailable === false
-              ? c.yellow('bin-missing')
-              : c.green('ready');
-        console.log(
-          `  • ${c.cyan(m.name.padEnd(24))} ${c.dim(m.transport.padEnd(7))} ${status}`,
-        );
-      }
-      console.log('');
+    console.log(
+      c.bold(
+        `agent-immune Pitfall Antibodies (${immune.agentImmuneBridge.activePitfallCount} active across ${immune.agentImmuneBridge.detectedStores.filter((s) => s.exists).length} store(s)):`,
+      ),
+    );
+    for (const ab of immune.agentImmuneBridge.pitfallAntibodies.slice(0, 8)) {
+      console.log(`  • [${c.cyan(ab.trigger_pattern)}] AVOID: ${ab.symptom} -> DO: ${ab.prescription}`);
     }
+    console.log('');
+    if (immune.quarantineCount > 0 && flags.strict) {
+      process.exitCode = 1;
+    }
+    return;
+  }
+
+  if (command === 'run') {
+    const goal = positionals.join(' ').trim();
+    if (!goal) {
+      console.error(c.red('Error: Please provide a goal, e.g. skilldeck run --demo "Deploy Cloudflare Worker"'));
+      process.exitCode = 1;
+      return;
+    }
+    const plan = await createSuperAgentPlan({ goal, report });
+    const run = await executeWorkflowGraph({
+      graph: plan.workflowGraph,
+      report,
+      mode: flags.live ? 'live' : 'dry-run',
+      goalContext: goal,
+    });
+    if (asJson) {
+      console.log(JSON.stringify({ plan, run }, null, 2));
+      return;
+    }
+    console.log(`\n${c.bold('SuperAgent Execution')} (${run.mode}, status=${run.status}, ${run.totalDurationMs}ms)`);
+    for (const st of run.steps) {
+      const badge = st.status === 'ok' ? c.green('OK   ') : c.red(st.status.toUpperCase().padEnd(5));
+      console.log(`  ${st.step}. ${badge} [${st.type}] ${c.cyan(st.label)} (${st.durationMs}ms)`);
+      console.log(`     ${c.dim(st.output.split('\n')[0] ?? '')}`);
+    }
+    console.log('');
     return;
   }
 
@@ -245,6 +304,7 @@ async function main(): Promise<void> {
         JSON.stringify(
           {
             healthScore: report.summary.healthScore,
+            immunityScore: report.summary.immunityScore,
             errorCount: report.summary.errorCount,
             warningCount: report.summary.warningCount,
             issues: report.issues,
@@ -258,23 +318,17 @@ async function main(): Promise<void> {
         `\n${c.bold('SkillDeck Lint')} — Health ${c.bold(`${report.summary.healthScore}/100`)} ` +
           `(${report.summary.errorCount} errors, ${report.summary.warningCount} warnings, ${report.summary.infoCount} info)\n`,
       );
-      if (report.issues.length === 0) {
-        console.log(`  ${c.green('✓')} No issues found.\n`);
-      } else {
-        for (const issue of report.issues) {
-          const badge =
-            issue.severity === 'error'
-              ? c.red('ERROR')
-              : issue.severity === 'warning'
-                ? c.yellow('WARN ')
-                : c.dim('INFO ');
-          console.log(`  ${badge} ${c.bold(issue.ruleId)} [${issue.targetName}] ${issue.message}`);
-          console.log(`        ${c.dim(`Fix: ${issue.suggestion}`)}`);
-        }
-        console.log('');
+      for (const issue of report.issues) {
+        const badge =
+          issue.severity === 'error'
+            ? c.red('ERROR')
+            : issue.severity === 'warning'
+              ? c.yellow('WARN ')
+              : c.dim('INFO ');
+        console.log(`  ${badge} ${c.bold(issue.ruleId)} [${issue.targetName}] ${issue.message}`);
       }
+      console.log('');
     }
-
     const strict = Boolean(flags.strict);
     if (report.summary.errorCount > 0 || (strict && report.summary.warningCount > 0)) {
       process.exitCode = 1;
@@ -287,7 +341,6 @@ async function main(): Promise<void> {
       console.log(JSON.stringify(report.budget, null, 2));
       return;
     }
-
     const { budget } = report;
     const ratio = budget.totalAlwaysOnTokens / Math.max(1, budget.recommendedStartupLimit);
     console.log(`\n${c.bold('Context Budget Analysis')}`);
@@ -295,21 +348,7 @@ async function main(): Promise<void> {
       `Always-On Startup: ${c.bold(budget.totalAlwaysOnTokens.toLocaleString())} / ` +
         `${budget.recommendedStartupLimit.toLocaleString()} tokens (${budget.startupUtilizationPct}%)`,
     );
-    console.log(`  ${c.cyan(renderBar(ratio, 32))}`);
-    console.log(
-      `  Skills Catalog: ${budget.totalStartupSkillTokens.toLocaleString()}t  |  ` +
-        `MCP Schemas: ${budget.totalStartupMcpTokens.toLocaleString()}t  |  ` +
-        `On-Demand Bodies: ${budget.totalOnDemandBodyTokens.toLocaleString()}t\n`,
-    );
-
-    console.log(c.bold('Top Startup Consumers:'));
-    for (const item of budget.topStartupConsumers.slice(0, 10)) {
-      console.log(
-        `  ${item.type.toUpperCase().padEnd(5)} ${c.cyan(item.name.padEnd(28))} ` +
-          `${String(item.startupTokens).padStart(5)}t  (${item.sharePct}%)`,
-      );
-    }
-    console.log('');
+    console.log(`  ${c.cyan(renderBar(ratio, 32))}\n`);
     return;
   }
 
@@ -318,83 +357,31 @@ async function main(): Promise<void> {
       console.log(JSON.stringify(report.conflicts, null, 2));
       return;
     }
-
-    console.log(`\n${c.bold('Trigger Conflict Radar')} (${report.conflicts.length} pairs detected)\n`);
-    if (report.conflicts.length === 0) {
-      console.log(`  ${c.green('✓')} No overlapping trigger pairs above threshold.\n`);
-      return;
-    }
-
+    console.log(`\n${c.bold('Trigger Conflict Radar')} (${report.conflicts.length} pairs)\n`);
     for (const pair of report.conflicts) {
-      const sev =
-        pair.severity === 'high'
-          ? c.red('HIGH')
-          : pair.severity === 'medium'
-            ? c.yellow('MED ')
-            : c.dim('LOW ');
-      const pct = `${Math.round(pair.similarity * 100)}%`;
       console.log(
-        `  ${sev} ${c.bold(pct)}  ${c.cyan(pair.skillA.name)} ↔ ${c.cyan(pair.skillB.name)}`,
+        `  ${pair.severity.toUpperCase().padEnd(6)} ${Math.round(pair.similarity * 100)}%  ${c.cyan(pair.skillA.name)} ↔ ${c.cyan(pair.skillB.name)}`,
       );
-      if (pair.sharedPhrases.length > 0) {
-        console.log(`       Shared phrases : ${pair.sharedPhrases.join(', ')}`);
-      }
-      if (pair.sharedKeywords.length > 0) {
-        console.log(`       Shared keywords: ${pair.sharedKeywords.join(', ')}`);
-      }
-      console.log(`       ${c.dim(pair.suggestion)}\n`);
     }
+    console.log('');
     return;
   }
 
   if (command === 'route') {
     const prompt = positionals.join(' ').trim();
     if (!prompt) {
-      console.error(c.red('Error: Please provide a prompt string, e.g. skilldeck route --demo "Deploy Cloudflare Worker"'));
+      console.error(c.red('Error: Please provide a prompt string.'));
       process.exitCode = 1;
       return;
     }
-
     const result = simulatePromptRouting(prompt, report.skills, report.mcpServers);
     if (asJson) {
       console.log(JSON.stringify(result, null, 2));
       return;
     }
-
-    console.log(`\n${c.bold('Prompt Routing Simulation')}`);
-    console.log(`Prompt: ${c.cyan(`"${result.prompt}"`)}`);
-    console.log(
-      `Projected Context: ${result.baselineStartupTokens.toLocaleString()}t startup + ` +
-        `${result.projectedActivatedTokens.toLocaleString()}t activated = ` +
-        `${c.bold(result.totalProjectedTokens.toLocaleString())}t\n`,
-    );
-
-    if (result.ambiguous && result.ambiguityReason) {
-      console.log(`  ${c.yellow('⚠ AMBIGUOUS ROUTING:')} ${result.ambiguityReason}\n`);
-    }
-
-    if (result.matches.length === 0) {
-      console.log(`  ${c.dim('No matching skills triggered for this prompt.')}\n`);
-      return;
-    }
-
+    console.log(`\n${c.bold('Prompt Routing Simulation')}: "${result.prompt}"`);
     for (const m of result.matches) {
-      const scorePct = `${Math.round(m.score * 100)}%`.padStart(4);
-      const badge = m.suppressedByNegative
-        ? c.dim('SUPPRESSED')
-        : m.confidence === 'high'
-          ? c.green('ACTIVATE  ')
-          : m.confidence === 'medium'
-            ? c.yellow('CANDIDATE ')
-            : c.dim('WEAK      ');
-      console.log(`  ${badge} ${c.bold(scorePct)}  ${c.cyan(m.skillName.padEnd(28))} (+${m.bodyTokens}t body)`);
-      if (m.matchedPhrases.length > 0 || m.matchedTerms.length > 0) {
-        const hits = [...m.matchedPhrases.map((p) => `"${p}"`), ...m.matchedTerms].slice(0, 8);
-        console.log(`             Matched: ${hits.join(', ')}`);
-      }
-      if (m.negativeHits.length > 0) {
-        console.log(`             ${c.yellow(`Negative boundary hit: ${m.negativeHits.join(', ')}`)}`);
-      }
+      console.log(`  ${Math.round(m.score * 100)}%  ${c.cyan(m.skillName)} (+${m.bodyTokens}t)`);
     }
     console.log('');
     return;
@@ -403,7 +390,6 @@ async function main(): Promise<void> {
   if (command === 'export') {
     const target = (typeof flags.target === 'string' ? flags.target : 'claude-code') as ExportTarget;
     const bundle = exportBundle(target, report.skills, report.mcpServers);
-
     if (typeof flags.out === 'string' && flags.out.trim().length > 0) {
       const outDir = path.resolve(flags.out);
       for (const file of bundle.files) {
@@ -411,28 +397,11 @@ async function main(): Promise<void> {
         fs.mkdirSync(path.dirname(dest), { recursive: true });
         fs.writeFileSync(dest, file.content, 'utf8');
       }
-      if (asJson) {
-        console.log(JSON.stringify({ outDir, ...bundle }, null, 2));
-      } else {
-        console.log(
-          `\n${c.green('✓')} Exported ${bundle.files.length} files for ${c.bold(target)} → ${c.cyan(outDir)} ` +
-            `(${bundle.redactedSecretCount} secrets automatically redacted)\n`,
-        );
-      }
-      return;
     }
-
     if (asJson) {
       console.log(JSON.stringify(bundle, null, 2));
     } else {
-      console.log(
-        `\n${c.bold(`Export Preview (${target})`)} — ${bundle.files.length} files ` +
-          `(${bundle.redactedSecretCount} secrets redacted). Pass --out <dir> to write to disk:\n`,
-      );
-      for (const f of bundle.files) {
-        console.log(`  • ${c.cyan(f.relativePath)} (${f.content.length} bytes)`);
-      }
-      console.log('');
+      console.log(`Exported ${bundle.files.length} files for ${target} (${bundle.redactedSecretCount} secrets redacted).`);
     }
     return;
   }
