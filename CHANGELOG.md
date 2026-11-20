@@ -1,21 +1,21 @@
 # Changelog
 
-All notable changes to **SkillDeck** (`meat-daemon-404/skill-deck`) are documented in this file.
+All notable changes to **SkillDeck** (`@skilldeck/*`) are documented in this file.
+
+## [0.4.0] - 2026-11-20
+
+### Added
+- **7-Platform `agent-immune v3.0.0` SQLite Discovery (`agent-immune-bridge.ts`)**: Expanded `getDefaultAgentImmuneStores()` to automatically discover `~/.claude/immune.sqlite`, `~/.cursor/immune.sqlite`, and `~/.codex/immune.sqlite` alongside `~/.dsh`, `~/.zcode`, and `~/.agent-immune`.
+- **DNA Vaccine Lockfile (`.immune/vaccine.lock.json`) Engine**: Added `compileVaccineLockfile()`, `verifyVaccineLockfile()`, and `readAntibodiesFromVaccineLock()` with canonical SHA-256 content digest verification.
+- **Pre-Flight Tool Risk Guard (`preflightCheckToolCall`)**: Scores blast radius (`0–100`, `safe` / `caution` / `quarantine`), provides deterministic safe command rewrites (such as `git push --force` -> `git push --force-with-lease`), and recalls matching `<immune_memory>` pitfall antibodies before execution.
 
 ## [0.3.0] - 2026-11-19
 
 ### Added
-- **Multi-Turn SuperAgent Tool-Calling Engine (`packages/core/src/superagent-loop.ts`)**: Native OpenAI-compatible API (`/v1/chat/completions`) and local Ollama (`/api/chat`) multi-turn autonomous tool execution loop with real-time step telemetry and interactive `SuperAgentView.tsx` console.
-- **PII & Workspace Path Sanitization (`packages/core/src/secrets.ts`)**: Automatic scrubbing of local home directories, Windows drive paths, and credential tokens across audit logs and outbound prompts.
-- **Native `agent-immune` v3.0 Dual-Layer Shield Compatibility**: Designed to pair seamlessly with `dsh-immune-system` (`v3.0.0`) Pre-Flight Blast-Radius Guard (`immune guard`), Workspace DNA Vaccine Lockfiles (`immune vaccinate`), and Swarm Federation (`immune federate`).
+- **Universal Platform Parity**: Added first-class scanning and export support for Cursor (`~/.cursor/skills`, `~/.cursor/mcp.json`) and Windsurf (`~/.codeium/windsurf/skills`, `~/.codeium/windsurf/mcp_config.json`) across all 7 major agent platforms.
+- **Zero-Token Lazy MCP Gateway (`@skilldeck/hub`)**: Added `hub_search_tools` (bilingual keyword discovery) and `hub_describe_tool` (on-demand JSON Schema lookup).
 
-## [0.2.0] - 2026-11-19
+## [0.2.1] - 2026-04-20
 
-### Added
-- **Transactional Skill Vault & Hub Registry (`packages/hub`, `packages/core`)**: Atomic install/rollback of agent `SKILL.md` bundles with SHA-256 integrity checks.
-- **MCP Aggregation Gateway (`packages/server`)**: Unified local control tower multiplexing multiple Model Context Protocol (MCP) servers with audit logging (`AuditMcpView.tsx`).
-
-## [0.1.0] - 2026-11-19
-
-### Added
-- Initial monorepo architecture (`apps/web`, `packages/core`, `packages/server`, `packages/cli`, `packages/hub`) with bilingual ZH/EN UI and Vitest test suite.
+### Fixed
+- Fixed Windows & custom scan-root classification, CJK Jaccard routing threshold, and `--json` export output purity.

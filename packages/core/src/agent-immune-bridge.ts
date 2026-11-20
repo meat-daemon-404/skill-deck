@@ -15,6 +15,38 @@ interface SqliteLikeDatabase {
 }
 
 /**
+ * DNA Vaccine Lockfile (`.immune/vaccine.lock.json`) schema compatible with `meat-daemon-404/agent-immune` v3.0.0.
+ */
+export interface DnaVaccineEntry {
+  trigger_pattern: string;
+  symptom: string;
+  prescription: string;
+  root_cause: string;
+  tool_name: string | null;
+  project_scope: string;
+  rubric_score: number;
+  quality_grade: 'advice' | 'tactic' | 'quarantined';
+}
+
+export interface DnaVaccineLockfile {
+  schemaVersion: 1;
+  engine: 'agent-immune';
+  count: number;
+  sha256: string;
+  antibodies: DnaVaccineEntry[];
+}
+
+export interface ToolPreflightRiskResult {
+  toolName: string;
+  riskScore: number;
+  decision: 'safe' | 'caution' | 'quarantine';
+  reasons: string[];
+  suggestedRewrite: string | null;
+  matchedAntibodies: PitfallAntibody[];
+  immuneMemoryBlock: string;
+}
+
+/**
  * Dynamically opens a local SQLite database via Node 22.19+/24 built-in `node:sqlite`
  * in strict read-only mode (zero runtime dependencies).
  */
@@ -153,6 +185,150 @@ export function readAntibodiesFromJsonl(jsonlPath: string): {
   }
 }
 
+/**
+ * Computes canonical SHA-256 content digest over sorted DNA Vaccine entries.
+ */
+function computeVaccineDigest(entries: DnaVaccineEntry[]): string {
+  const canonical = entries.map((e) => ({
+    trigger_pattern: e.trigger_pattern,
+    symptom: e.symptom,
+    prescription: e.prescription,
+    root_cause: e.root_cause,
+    tool_name: e.tool_name,
+    project_scope: e.project_scope,
+    rubric_score: e.rubric_score,
+    quality_grade: e.quality_grade,
+  }));
+  return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
+}
+
+/**
+ * Compiles high-grade Pitfall Antibodies into a deterministic `.immune/vaccine.lock.json`
+ * DNA Vaccine Lockfile compatible with `meat-daemon-404/agent-immune` v3.0.0.
+ */
+export function compileVaccineLockfile(
+  antibodies: PitfallAntibody[],
+  minRubricScore = 80,
+): DnaVaccineLockfile {
+  const eligible = antibodies
+    .filter((a) => a.status === 'active' && a.rubric_score >= minRubricScore)
+    .map<DnaVaccineEntry>((a) => ({
+      trigger_pattern: sanitizeImmuneDelimiter(a.trigger_pattern),
+      symptom: sanitizeImmuneDelimiter(a.symptom),
+      prescription: sanitizeImmuneDelimiter(a.prescription),
+      root_cause: a.root_cause || 'command_syntax',
+      tool_name: a.tool_name ?? null,
+      project_scope: a.project_scope || '*',
+      rubric_score: a.rubric_score,
+      quality_grade: a.quality_grade,
+    }))
+    .sort((a, b) =>
+      `${a.trigger_pattern}|${a.prescription}`.localeCompare(`${b.trigger_pattern}|${b.prescription}`),
+    );
+
+  return {
+    schemaVersion: 1,
+    engine: 'agent-immune',
+    count: eligible.length,
+    sha256: computeVaccineDigest(eligible),
+    antibodies: eligible,
+  };
+}
+
+/**
+ * Verifies the cryptographic SHA-256 content digest and count of a DNA Vaccine Lockfile.
+ */
+export function verifyVaccineLockfile(lockfile: DnaVaccineLockfile): {
+  valid: boolean;
+  expectedSha256: string;
+  actualSha256: string;
+  reason?: string;
+} {
+  if (!lockfile || lockfile.schemaVersion !== 1 || !Array.isArray(lockfile.antibodies)) {
+    return {
+      valid: false,
+      expectedSha256: '',
+      actualSha256: '',
+      reason: 'Unsupported or malformed vaccine.lock.json schemaVersion',
+    };
+  }
+  const expectedSha256 = computeVaccineDigest(lockfile.antibodies);
+  if (lockfile.count !== lockfile.antibodies.length) {
+    return {
+      valid: false,
+      expectedSha256,
+      actualSha256: lockfile.sha256,
+      reason: `Count mismatch: declared ${lockfile.count}, actual ${lockfile.antibodies.length}`,
+    };
+  }
+  if (expectedSha256 !== lockfile.sha256) {
+    return {
+      valid: false,
+      expectedSha256,
+      actualSha256: lockfile.sha256,
+      reason: 'SHA-256 content digest mismatch',
+    };
+  }
+  return {
+    valid: true,
+    expectedSha256,
+    actualSha256: lockfile.sha256,
+  };
+}
+
+/**
+ * Reads `.immune/vaccine.lock.json` DNA Vaccine Lockfile and verifies its SHA-256 integrity.
+ */
+export function readAntibodiesFromVaccineLock(lockPath: string): {
+  rows: PitfallAntibody[];
+  verified: boolean;
+  error?: string;
+} {
+  if (!fs.existsSync(lockPath)) {
+    return { rows: [], verified: true };
+  }
+  try {
+    const parsed = JSON.parse(fs.readFileSync(lockPath, 'utf8')) as DnaVaccineLockfile;
+    const verification = verifyVaccineLockfile(parsed);
+    const rows: PitfallAntibody[] = (parsed.antibodies ?? []).map((entry, idx) => {
+      const hash = createHash('sha256')
+        .update(`${entry.trigger_pattern}|${entry.symptom}|${entry.prescription}`)
+        .digest('hex')
+        .slice(0, 8);
+      return {
+        id: `vaccine:${hash}:${idx + 1}`,
+        trigger_pattern: String(entry.trigger_pattern ?? ''),
+        symptom: String(entry.symptom ?? ''),
+        prescription: String(entry.prescription ?? ''),
+        status: 'active',
+        quality_grade:
+          entry.quality_grade === 'tactic' || entry.quality_grade === 'quarantined'
+            ? entry.quality_grade
+            : 'advice',
+        rubric_score: Number(entry.rubric_score ?? 88),
+        root_cause: String(entry.root_cause ?? 'config_mismatch'),
+        hit_count: 0,
+        fail_count: 0,
+        tool_name: entry.tool_name ? String(entry.tool_name) : null,
+        project_scope: String(entry.project_scope ?? '*'),
+        sourceDb: lockPath,
+        created_at: Date.now(),
+      };
+    });
+    return {
+      rows,
+      verified: verification.valid,
+      error: verification.valid ? undefined : verification.reason,
+    };
+  } catch (error) {
+    return {
+      rows: [],
+      verified: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 export function getDefaultAgentImmuneStores(extraRoots: string[] = []): Array<{
   path: string;
   kind: 'sqlite' | 'jsonl';
@@ -174,40 +350,22 @@ export function getDefaultAgentImmuneStores(extraRoots: string[] = []): Array<{
     add(path.join(root, 'immune.sqlite'), 'sqlite');
   }
 
-  // Standard `meat-daemon-404/agent-immune` local database & rules locations across DSH, ZCode, Antigravity & Codex
+  // Standard `meat-daemon-404/agent-immune` v3.0.0 7-platform local database & rules locations
   add(path.join(home, '.dsh', 'immune.sqlite'), 'sqlite');
-  add(path.join(home, '.gemini', 'config', '.dsh', 'immune.sqlite'), 'sqlite');
   add(path.join(home, '.zcode', 'immune.sqlite'), 'sqlite');
+  add(path.join(home, '.claude', 'immune.sqlite'), 'sqlite');
+  add(path.join(home, '.cursor', 'immune.sqlite'), 'sqlite');
+  add(path.join(home, '.codex', 'immune.sqlite'), 'sqlite');
   add(path.join(home, '.agent-immune', 'immune.sqlite'), 'sqlite');
   add(path.join(home, '.immune', 'rules.jsonl'), 'jsonl');
   add(path.join(home, '.skilldeck', 'immune', 'rules.jsonl'), 'jsonl');
-
-  // Dynamically scan ZCode & DSH plugin data directories (e.g. ~/.zcode/cli/plugins/data/dsh-immune-system@*/immune.sqlite)
-  const pluginDataDirs = [
-    path.join(home, '.zcode', 'cli', 'plugins', 'data'),
-    path.join(home, '.dsh', 'plugins'),
-    path.join(home, '.dsh', 'storages'),
-  ];
-  for (const dataDir of pluginDataDirs) {
-    if (!fs.existsSync(dataDir)) continue;
-    try {
-      for (const entry of fs.readdirSync(dataDir, { withFileTypes: true })) {
-        if (!entry.isDirectory()) continue;
-        const candidate = path.join(dataDir, entry.name, 'immune.sqlite');
-        if (fs.existsSync(candidate)) {
-          add(candidate, 'sqlite');
-        }
-      }
-    } catch {
-      // Ignore unreadable plugin data dir
-    }
-  }
 
   return stores;
 }
 
 /**
- * Loads pitfall antibodies across all detected `agent-immune` SQLite DBs and `.immune/rules.jsonl` files.
+ * Loads pitfall antibodies across all detected `agent-immune` SQLite DBs, `.immune/rules.jsonl`,
+ * and `.immune/vaccine.lock.json` DNA Vaccine lockfiles.
  */
 export async function loadAgentImmuneBridge(
   extraRoots: string[] = [],
@@ -258,6 +416,30 @@ export async function loadAgentImmuneBridge(
       antibodyCount: added,
       error: loaded.error,
     });
+  }
+
+  // Also check any `.immune/vaccine.lock.json` in extraRoots
+  for (const root of extraRoots) {
+    const lockPath = path.resolve(root, '.immune', 'vaccine.lock.json');
+    if (fs.existsSync(lockPath)) {
+      const lockLoaded = readAntibodiesFromVaccineLock(lockPath);
+      let added = 0;
+      for (const ab of lockLoaded.rows) {
+        const key = `${ab.trigger_pattern.toLowerCase()}::${ab.prescription.toLowerCase()}`;
+        if (!dedupKeys.has(key)) {
+          dedupKeys.add(key);
+          pitfallAntibodies.push(ab);
+          added += 1;
+        }
+      }
+      detectedStores.push({
+        path: lockPath,
+        kind: 'jsonl',
+        exists: true,
+        antibodyCount: added,
+        error: lockLoaded.error,
+      });
+    }
   }
 
   pitfallAntibodies.sort((a, b) => b.rubric_score - a.rubric_score || b.hit_count - a.hit_count);
@@ -361,6 +543,63 @@ export function recallPitfallAntibodies(
     query,
     matches: top,
     immuneMemoryBlock,
+  };
+}
+
+/**
+ * Pre-Flight Tool Risk Guard (`agent-immune` v3.0.0 compatible):
+ * Scores blast radius (0-100), suggests deterministic safe command rewrites, and recalls matching pitfall antibodies.
+ */
+export function preflightCheckToolCall(
+  toolName: string,
+  args: Record<string, unknown> | string,
+  antibodies: PitfallAntibody[] = [],
+): ToolPreflightRiskResult {
+  const serialized = typeof args === 'string' ? args : JSON.stringify(args);
+  let riskScore = 0;
+  const reasons: string[] = [];
+  let suggestedRewrite: string | null = null;
+
+  if (/rm\s+-[rf]+\s+(\/|~|\$HOME|\.\.)/i.test(serialized)) {
+    riskScore = Math.max(riskScore, 95);
+    reasons.push('Destructive recursive deletion on root or home path');
+  }
+  if (/git\s+push\s+(?:--force|-f)(?!-with-lease)/i.test(serialized)) {
+    riskScore = Math.max(riskScore, 78);
+    reasons.push('Unprotected git force-push can overwrite upstream history');
+    suggestedRewrite = serialized.replace(/git\s+push\s+(?:--force|-f)(?!-with-lease)/i, 'git push --force-with-lease');
+  }
+  if (/git\s+reset\s+--hard/i.test(serialized)) {
+    riskScore = Math.max(riskScore, 68);
+    reasons.push('git reset --hard discards uncommitted working tree changes');
+    suggestedRewrite = suggestedRewrite ?? 'git stash push -u -m "pre-reset-backup" && git reset --hard';
+  }
+  if (/DROP\s+(?:TABLE|DATABASE)|TRUNCATE\s+TABLE/i.test(serialized)) {
+    riskScore = Math.max(riskScore, 92);
+    reasons.push('Destructive SQL DDL statement detected');
+  }
+  if (/chmod\s+-R\s+777/i.test(serialized)) {
+    riskScore = Math.max(riskScore, 72);
+    reasons.push('World-writable recursive permission grant (chmod -R 777)');
+  }
+
+  const recall = recallPitfallAntibodies(`${toolName} ${serialized}`, antibodies, 3);
+  if (recall.matches.length > 0) {
+    riskScore = Math.min(100, Math.max(riskScore, 35 + recall.matches.length * 10));
+    reasons.push(`Matched ${recall.matches.length} historical pitfall antibody rule(s)`);
+  }
+
+  const decision: ToolPreflightRiskResult['decision'] =
+    riskScore >= 85 ? 'quarantine' : riskScore >= 40 ? 'caution' : 'safe';
+
+  return {
+    toolName,
+    riskScore,
+    decision,
+    reasons,
+    suggestedRewrite,
+    matchedAntibodies: recall.matches.map((m) => m.antibody),
+    immuneMemoryBlock: recall.immuneMemoryBlock,
   };
 }
 
