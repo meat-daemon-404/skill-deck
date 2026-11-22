@@ -1,78 +1,52 @@
-# SkillDeck v0.2
+# Skill Deck (`skill-deck` v0.4.0)
 
-**Local-first SuperAgent Control Tower, MCP Aggregation Gateway, Dual-Layer Agent-Immune Shield (natively integrated with [`meat-daemon-404/agent-immune`](https://github.com/meat-daemon-404/agent-immune)), and Transactional Skill Vault — with full Bilingual UI (简体中文 / English).**
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://github.com/meat-daemon-404/skill-deck)
+[![Tests](https://img.shields.io/badge/Vitest-197%2F197_Passing-2ea44f)](https://github.com/meat-daemon-404/skill-deck)
 
-[English](./README.md) | [简体中文](./README.zh-CN.md)
+[English](README.md) | [简体中文](README.zh-CN.md)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-0284c7.svg)](./LICENSE)
-[![Node.js >= 20](https://img.shields.io/badge/Node.js-%3E%3D20-047857.svg)](https://nodejs.org)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-3178c6.svg)](https://www.typescriptlang.org)
-[![agent-immune native](https://img.shields.io/badge/agent--immune-SQLite%20%2B%20JSONL%20Native-10b981.svg)](https://github.com/meat-daemon-404/agent-immune)
+> **Local-First SuperAgent Control Tower, MCP Aggregation Gateway, Self-Evolving Immune Bridge & Transactional Skill Vault** — Manage skills, MCP servers, token budgets, and `agent-immune` v3.0.0 pitfall immunity across Claude Code, Codex, Cursor, ZCode, DeepSeek Harness (DSH), Gemini CLI, and Windsurf from a single CLI and web dashboard.
 
----
+## Core Capabilities
 
-## What's New in v0.2
+1. **Unified Multi-Agent Skill Vault (`packages/core/src/vault.ts`)**
+   - Atomic, transactional skill installation, symlink/copy synchronization, snapshot rollback, and drift detection across 7 local agent harnesses.
+2. **MCP Aggregation Gateway & Budget Guard (`packages/core/src/gateway.ts`)**
+   - Multiplexes multiple upstream MCP servers behind a single local endpoint with per-tool latency telemetry, schema deduplication, and token cost caps.
+3. **Native `agent-immune` v3.0.0 Dual-Layer Shield (`packages/core/src/agent-immune-bridge.ts`)**
+   - **7-Platform Immune Store Discovery**: Automatically locates and federates SQLite antibody stores across DSH, Claude Code, Cursor, Codex, ZCode, Windsurf, and Gemini CLI (`discoverAgentImmuneStores`, `federateAgentImmuneRules`).
+   - **Project DNA Lockfile Sync**: Compiles and verifies `.immune/vaccine.lock.json` (`compileVaccineLockfile`, `verifyVaccineLockfile`, `applyVaccineLockfile`) with SHA-256 integrity checks.
+   - **Pre-Flight Tool Interceptor**: Evaluates every tool call before execution (`preflightCheckToolCall`) with a 0–100 blast-radius score (`allow` / `warn` / `rewrite` / `block`) and safe command rewriting.
 
-1. **SuperAgent Command Center & Live DAG Runner** — Auto-detects local CLI agents (`agy` Antigravity CLI, `ollama` + live local models, `claude`, `gemini`, `codex`, `gh`), routes across all 7 Agent platforms (`Antigravity`, `Claude Code`, `Cursor`, `Gemini CLI`, `Codex`, `DSH`, `ZCode`), injects `<immune_memory>` pitfall antibodies, and runs visual React Flow DAGs step-by-step with live per-node status telemetry.
-2. **Native [`meat-daemon-404/agent-immune`](https://github.com/meat-daemon-404/agent-immune) Integration (Dual-Layer Immunity)**:
-   - **Layer 1 — Self-Evolving Pitfall Memory (`trigger → avoid → do`)**: Zero-dependency `node:sqlite` read-only bridge for `~/.dsh/immune.sqlite`, `~/.zcode/immune.sqlite`, `~/.agent-immune/immune.sqlite`, and Git-native `.immune/rules.jsonl` team sync, with delimiter-isolated `<immune_memory>` injection and live pitfall distillation.
-   - **Layer 2 — ToxicSkills Security Shield & Runtime Firewall**: Scans every `SKILL.md` and `scripts/` for prompt injection (`IMM001`), credential exfiltration (`IMM002`), destructive pipes (`IMM003`), covert tool poisoning (`IMM004`), and Unicode smuggling (`IMM005`); enforces a runaway loop circuit breaker and Human-in-the-Loop Quarantine Queue (`Approve` / `Reject` / `Immunize`).
-3. **`@skilldeck/hub` — Real Local MCP Aggregation Gateway (`skilldeck hub`)** — A genuine stdio JSON-RPC 2.0 MCP Meta-Server exposing 7 progressive-disclosure meta-tools (`~580` tokens vs. `20,000+` direct tokens), downstream MCP `tools/list` probes, and a real-time SSE telemetry stream.
-4. **Skill Vault & Transactional Sync** — Single-source-of-truth Vault (`~/.skilldeck/vault/`), Dry-Run Sync preview, safe skill Quarantine/Disable, and 1-click Transaction Rollback.
-5. **Bilingual Web UI (简体中文 Default + 1-Click EN Switch)** — Full Chinese & English interface with modern light/dark mode.
-
----
-
-## Quick Start
-
-```bash
-pnpm install
-pnpm build
-pnpm demo
-# Open http://127.0.0.1:4173 — switch to "扫描本机（只读） / My Machine" anytime!
-```
-
-### Connect Every Agent to `@skilldeck/hub` (1 Entry, ~95% Startup Token Savings)
-
-```json
-{
-  "mcpServers": {
-    "skilldeck-hub": {
-      "command": "node",
-      "args": ["<path-to-skill-deck>/packages/cli/dist/cli.js", "hub", "--local"]
-    }
-  }
-}
-```
-
-### CLI Commands
-
-```bash
-node packages/cli/dist/cli.js scan --local       # Scan Antigravity, Claude, Cursor, Codex, DSH & ZCode
-node packages/cli/dist/cli.js immune --demo      # Dual-layer ToxicSkills + agent-immune pitfall report
-node packages/cli/dist/cli.js agents             # Detect local CLI agents & running Ollama models
-node packages/cli/dist/cli.js run --demo "Deploy Cloudflare Worker with wrangler.toml"
-node packages/cli/dist/cli.js hub --local        # Start real stdio JSON-RPC 2.0 MCP Meta-Server
-node packages/cli/dist/cli.js serve --demo       # Launch bilingual Web Control Tower
-```
-
----
-
-## Architecture
+## Monorepo Architecture
 
 ```text
 skill-deck/
 ├── packages/
-│   ├── core/          # @skilldeck/core — Scanner (7 platforms), agent-immune SQLite/JSONL bridge, ToxicSkills shield, Vault & Rollback, SuperAgent planner & DAG runner
-│   ├── hub/           # @skilldeck/hub — Real stdio MCP Meta-Server, downstream JSON-RPC client, runtime firewall & SSE traces
-│   ├── server/        # @skilldeck/server — Localhost-only HTTP/SSE API & static Web UI host
-│   └── cli/           # @skilldeck/cli — `scan`, `lint`, `immune`, `budget`, `conflicts`, `route`, `agents`, `run`, `hub`, `export`, `serve`
-├── apps/
-│   └── web/           # @skilldeck/web — Bilingual (ZH/EN) React 19 + React Flow Control Tower UI
-└── examples/
-    └── demo-workspace/ # Realistic demo with EN/ZH skills, .immune/rules.jsonl, toxic demo skill & MCP configs
+│   ├── core/                         # Core engine: Skill Vault, MCP Gateway & agent-immune v3.0 bridge
+│   │   ├── src/agent-immune-bridge.ts
+│   │   └── test/                     # Vitest unit & integration test suites
+│   ├── cli/                          # `skill-deck` CLI for vault sync, MCP routing & immune ops
+│   └── web/                          # Local control-tower dashboard UI
+├── package.json
+└── tsconfig.json
+```
+
+## Quick Start
+
+```bash
+git clone https://github.com/meat-daemon-404/skill-deck.git
+cd skill-deck
+npm install
+
+# Run all 197 unit & integration tests across 14 test suites
+npm test
+
+# Build all packages
+npm run build
 ```
 
 ## License
 
-MIT © 2026 SkillDeck Contributors
+Released under the [MIT License](LICENSE).

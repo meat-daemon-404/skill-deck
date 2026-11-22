@@ -1,61 +1,38 @@
-# SkillDeck v0.2
+# Skill Deck (`skill-deck` v0.4.0)
 
-**开源、100% 本地优先的 AI Agent SuperAgent 超级总控台 · MCP 聚合网关 · 双层 Agent-Immune 免疫中心（原生融合 [`meat-daemon-404/agent-immune`](https://github.com/meat-daemon-404/agent-immune)）· 事务型技能金库。默认简体中文界面，支持一键中英切换。**
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://github.com/meat-daemon-404/skill-deck)
+[![Tests](https://img.shields.io/badge/Vitest-197%2F197_Passing-2ea44f)](https://github.com/meat-daemon-404/skill-deck)
 
-[English](./README.md) | [简体中文](./README.zh-CN.md)
+[English](README.md) | [简体中文](README.zh-CN.md)
 
----
+> **本地优先的超级智能体控制塔、MCP 聚合网关、自进化免疫桥接器与事务级技能保险库** —— 在单一 CLI 与可视化控制台中统一管理 Claude Code、Codex、Cursor、ZCode、DeepSeek Harness (DSH)、Gemini CLI 与 Windsurf 的 Skill 分发、MCP 路由以及 `agent-immune` v3.0.0 踩坑免疫策略。
 
-## v0.2 核心能力一览
+## 核心能力
 
-1. **🧠 SuperAgent 超级指挥台 & 画布真执行引擎**
-   - 自动探测本机已安装的 CLI Agent 与模型引擎（Antigravity `agy`、`Ollama` 实时本地模型、`Claude Code`、`Gemini CLI`、`Codex`、`gh`），支持接入本地 Ollama 或任意 OpenAI 兼容模型（离线无 Key 也能确定性运行）。
-   - 横跨 **7 大平台**（Antigravity、Claude Code、Cursor、Gemini CLI、Codex、**DSH**、**ZCode**）自动路由技能与 MCP，注入 `<immune_memory>` 踩坑记忆并自动避开隔离技能，一键发送到 React Flow 画布运行并逐节点高亮执行状态。
-2. **🧬 双层 Agent-Immune 免疫中心（原生对接 `meat-daemon-404/agent-immune`）**
-   - **第一层 · 踩坑自进化免疫记忆（Pitfall Immunity）**：零外部依赖通过 Node 原生 `node:sqlite` 只读挂载本机 `~/.dsh/immune.sqlite`、`~/.zcode/immune.sqlite` 及 Git 团队同步文件 `.immune/rules.jsonl`，实现 `trigger → avoid → do` 实时召回、严格隔离 `<`/`>` 分隔符注入 `<immune_memory>`、手动/自动蒸馏新抗体与一键导出。
-   - **第二层 · 毒技能扫描与运行时防火墙（Security Immunity）**：静态扫描所有 `SKILL.md` 及 `scripts/` 中的提示词注入（`IMM001`）、密钥外传（`IMM002`）、危险管道命令（`IMM003`）、隐蔽注释投毒（`IMM004`）与零宽字符欺骗（`IMM005`）；运行时内置**死循环熔断器** + **高危调用隔离审批队列（放行 / 拒绝 / 提取抗体）**。
-3. **🔥 `@skilldeck/hub` 本地 MCP 聚合网关（真实 stdio MCP 元服务）**
-   - 所有本机 Agent 只需配置唯一一个 `skilldeck-hub` MCP 入口，通过 7 个渐进式元工具按需发现并调用下游 MCP 与全机 Skills，常驻启动 Token 从 20,000+ 直降至 **~580t（立省 95%+）**，并在网页端提供 SSE 实时调用监控流与下游工具探活。
-4. **🔗 Skill Vault 统一金库与时光机回滚**
-   - 单一真源仓库 `~/.skilldeck/vault/`，支持沙盒预演（Dry-Run）同步、安全启停/隔离技能（`SKILL.md` ⇄ `SKILL.md.disabled`），每次写入自动备份，随时一键 `Undo` 原样回滚。
-5. **🌐 默认简体中文界面（一键 `中文 / EN` + 深浅色模式自适应）**
+1. **事务级跨平台技能保险库（`packages/core/src/vault.ts`）**
+   - 支持跨 7 大本地智能体平台的技能原子安装、软链/镜像同步、快照回滚与配置漂移检测。
+2. **MCP 聚合网关与成本守卫（`packages/core/src/gateway.ts`）**
+   - 将多个上游 MCP Server 聚合为单一本地入口，提供工具级延迟遥测、Schema 去重与 Token 预算护栏。
+3. **原生集成 `agent-immune` v3.0.0 双层免疫护盾（`packages/core/src/agent-immune-bridge.ts`）**
+   - **7 大平台免疫库自动发现与联邦**：自动定位并联邦合并 DSH、Claude Code、Cursor、Codex、ZCode、Windsurf 与 Gemini CLI 的 SQLite 抗体库（`discoverAgentImmuneStores`、`federateAgentImmuneRules`）。
+   - **项目级 DNA 疫苗锁文件编译与校验**：支持生成、校验并应用 `.immune/vaccine.lock.json`（`compileVaccineLockfile`、`verifyVaccineLockfile`、`applyVaccineLockfile`），内置 SHA-256 完整性防篡改校验。
+   - **执行前爆炸半径拦截器**：在工具调用落盘前通过 `preflightCheckToolCall` 计算 0–100 爆炸半径风险分（`allow` / `warn` / `rewrite` / `block`），对高危操作自动给出无损安全改写命令。
 
----
+## 快速开始
 
-## 快速上手
+```bash
+git clone https://github.com/meat-daemon-404/skill-deck.git
+cd skill-deck
+npm install
 
-```powershell
-pnpm install
-pnpm build
-pnpm demo
-# 浏览器打开 http://127.0.0.1:4173，顶栏随时切换「演示环境 / 扫描本机（只读）/ 自定义目录」
+# 运行全部 14 个测试套件共 197 项 Vitest 测试
+npm test
+
+# 构建全部工作区包
+npm run build
 ```
 
-### 一键把本机所有 Agent 接到 `skilldeck-hub`
-在 Antigravity / Claude Code / Cursor / Codex / ZCode / DSH 的 MCP 配置中添加：
+## 许可证
 
-```json
-{
-  "mcpServers": {
-    "skilldeck-hub": {
-      "command": "node",
-      "args": ["<path-to-skill-deck>/packages/cli/dist/cli.js", "hub", "--local"]
-    }
-  }
-}
-```
-
-### 常用 CLI 命令
-
-```powershell
-node packages/cli/dist/cli.js scan --local       # 扫描本机 7 大 Agent 平台（含 DSH 与 ZCode）
-node packages/cli/dist/cli.js immune --local     # 双层免疫体检（毒技能 + agent-immune 踩坑抗体）
-node packages/cli/dist/cli.js agents             # 探测本机 agy / ollama / claude / gemini / codex
-node packages/cli/dist/cli.js run --demo "部署 Cloudflare Worker 并检查 PostgreSQL RLS"
-node packages/cli/dist/cli.js hub --local        # 启动真实 stdio JSON-RPC 2.0 MCP 聚合网关
-node packages/cli/dist/cli.js serve --demo       # 启动中文 Web 控制塔
-```
-
-## 开源协议
-
-MIT © 2026 SkillDeck Contributors
+本项目基于 [MIT License](LICENSE) 开源。
